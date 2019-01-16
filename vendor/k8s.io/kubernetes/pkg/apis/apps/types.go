@@ -376,14 +376,14 @@ type DeploymentStrategy struct {
 type DeploymentStrategyType string
 
 const (
-	// RecreateDeploymentStrategyType - kill all existing pods before creating new ones.
+	// Kill all existing pods before creating new ones.
 	RecreateDeploymentStrategyType DeploymentStrategyType = "Recreate"
 
-	// RollingUpdateDeploymentStrategyType - Replace the old RCs by new one using rolling update i.e gradually scale down the old RCs and scale up the new one.
+	// Replace the old RCs by new one using rolling update i.e gradually scale down the old RCs and scale up the new one.
 	RollingUpdateDeploymentStrategyType DeploymentStrategyType = "RollingUpdate"
 )
 
-// RollingUpdateDeployment is the spec to control the desired behavior of rolling update.
+// Spec to control the desired behavior of rolling update.
 type RollingUpdateDeployment struct {
 	// The maximum number of pods that can be unavailable during the update.
 	// Value can be an absolute number (ex: 5) or a percentage of total pods at the start of update (ex: 10%).
@@ -511,14 +511,14 @@ type DaemonSetUpdateStrategy struct {
 type DaemonSetUpdateStrategyType string
 
 const (
-	// RollingUpdateDaemonSetStrategyType - Replace the old daemons by new ones using rolling update i.e replace them on each node one after the other.
+	// Replace the old daemons by new ones using rolling update i.e replace them on each node one after the other.
 	RollingUpdateDaemonSetStrategyType DaemonSetUpdateStrategyType = "RollingUpdate"
 
-	// OnDeleteDaemonSetStrategyType - Replace the old daemons only when it's killed
+	// Replace the old daemons only when it's killed
 	OnDeleteDaemonSetStrategyType DaemonSetUpdateStrategyType = "OnDelete"
 )
 
-// RollingUpdateDaemonSet is the spec to control the desired behavior of daemon set rolling update.
+// Spec to control the desired behavior of daemon set rolling update.
 type RollingUpdateDaemonSet struct {
 	// The maximum number of DaemonSet pods that can be unavailable during the
 	// update. Value can be an absolute number (ex: 5) or a percentage of total

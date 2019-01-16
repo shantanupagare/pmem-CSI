@@ -33,7 +33,6 @@ go_library(
         "rs_util.go",
         "service_util.go",
         "size.go",
-        "ssh.go",
         "statefulset_utils.go",
         "test_context.go",
         "upgrade_util.go",

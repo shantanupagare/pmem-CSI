@@ -26,8 +26,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"k8s.io/klog"
 	"k8s.io/utils/exec"
+
+	"k8s.io/klog"
 )
 
 const (
@@ -40,13 +41,10 @@ const (
 	nsenterPath = "nsenter"
 )
 
-// Nsenter is a type alias for backward compatibility
-type Nsenter = NSEnter
-
-// NSEnter is part of experimental support for running the kubelet
+// Nsenter is part of experimental support for running the kubelet
 // in a container.
 //
-// NSEnter requires:
+// Nsenter requires:
 //
 // 1.  Docker >= 1.6 due to the dependency on the slave propagation mode
 //     of the bind-mount of the kubelet root directory in the container.
@@ -68,20 +66,20 @@ type Nsenter = NSEnter
 //     systemd is installed/enabled in the operating system.
 // For more information about mount propagation modes, see:
 //   https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
-type NSEnter struct {
+type Nsenter struct {
 	// a map of commands to their paths on the host filesystem
 	paths map[string]string
 
 	// Path to the host filesystem, typically "/rootfs". Used only for testing.
 	hostRootFsPath string
 
-	// Exec implementation
+	// Exec implementation, used only for testing
 	executor exec.Interface
 }
 
-// NewNsenter constructs a new instance of NSEnter
-func NewNsenter(hostRootFsPath string, executor exec.Interface) (*NSEnter, error) {
-	ne := &NSEnter{
+// NewNsenter constructs a new instance of Nsenter
+func NewNsenter(hostRootFsPath string, executor exec.Interface) (*Nsenter, error) {
+	ne := &Nsenter{
 		hostRootFsPath: hostRootFsPath,
 		executor:       executor,
 	}
@@ -91,7 +89,7 @@ func NewNsenter(hostRootFsPath string, executor exec.Interface) (*NSEnter, error
 	return ne, nil
 }
 
-func (ne *NSEnter) initPaths() error {
+func (ne *Nsenter) initPaths() error {
 	ne.paths = map[string]string{}
 	binaries := []string{
 		"mount",
@@ -125,7 +123,7 @@ func (ne *NSEnter) initPaths() error {
 }
 
 // Exec executes nsenter commands in hostProcMountNsPath mount namespace
-func (ne *NSEnter) Exec(cmd string, args []string) exec.Cmd {
+func (ne *Nsenter) Exec(cmd string, args []string) exec.Cmd {
 	hostProcMountNsPath := filepath.Join(ne.hostRootFsPath, mountNsPath)
 	fullArgs := append([]string{fmt.Sprintf("--mount=%s", hostProcMountNsPath), "--"},
 		append([]string{ne.AbsHostPath(cmd)}, args...)...)
@@ -133,27 +131,8 @@ func (ne *NSEnter) Exec(cmd string, args []string) exec.Cmd {
 	return ne.executor.Command(nsenterPath, fullArgs...)
 }
 
-// Command returns a command wrapped with nsenter
-func (ne *NSEnter) Command(cmd string, args ...string) exec.Cmd {
-	return ne.Exec(cmd, args)
-}
-
-// CommandContext returns a CommandContext wrapped with nsenter
-func (ne *NSEnter) CommandContext(ctx context.Context, cmd string, args ...string) exec.Cmd {
-	hostProcMountNsPath := filepath.Join(ne.hostRootFsPath, mountNsPath)
-	fullArgs := append([]string{fmt.Sprintf("--mount=%s", hostProcMountNsPath), "--"},
-		append([]string{ne.AbsHostPath(cmd)}, args...)...)
-	klog.V(5).Infof("Running nsenter command: %v %v", nsenterPath, fullArgs)
-	return ne.executor.CommandContext(ctx, nsenterPath, fullArgs...)
-}
-
-// LookPath returns a LookPath wrapped with nsenter
-func (ne *NSEnter) LookPath(file string) (string, error) {
-	return "", fmt.Errorf("not implemented, error looking up : %s", file)
-}
-
 // AbsHostPath returns the absolute runnable path for a specified command
-func (ne *NSEnter) AbsHostPath(command string) string {
+func (ne *Nsenter) AbsHostPath(command string) string {
 	path, ok := ne.paths[command]
 	if !ok {
 		return command
@@ -162,7 +141,7 @@ func (ne *NSEnter) AbsHostPath(command string) string {
 }
 
 // SupportsSystemd checks whether command systemd-run exists
-func (ne *NSEnter) SupportsSystemd() (string, bool) {
+func (ne *Nsenter) SupportsSystemd() (string, bool) {
 	systemdRunPath, ok := ne.paths["systemd-run"]
 	return systemdRunPath, ok && systemdRunPath != ""
 }
@@ -180,7 +159,7 @@ func (ne *NSEnter) SupportsSystemd() (string, bool) {
 //
 // BEWARE! EvalSymlinks is not able to detect symlink looks with mustExist=false!
 // If /tmp/link is symlink to /tmp/link, EvalSymlinks(/tmp/link/foo) returns /tmp/link/foo.
-func (ne *NSEnter) EvalSymlinks(pathname string, mustExist bool) (string, error) {
+func (ne *Nsenter) EvalSymlinks(pathname string, mustExist bool) (string, error) {
 	var args []string
 	if mustExist {
 		// "realpath -e: all components of the path must exist"
@@ -200,16 +179,16 @@ func (ne *NSEnter) EvalSymlinks(pathname string, mustExist bool) (string, error)
 // KubeletPath returns the path name that can be accessed by containerized
 // kubelet. It is recommended to resolve symlinks on the host by EvalSymlinks
 // before calling this function
-func (ne *NSEnter) KubeletPath(pathname string) string {
+func (ne *Nsenter) KubeletPath(pathname string) string {
 	return filepath.Join(ne.hostRootFsPath, pathname)
 }
 
-// NewFakeNsenter returns a NSEnter that does not run "nsenter --mount=... --",
+// NewFakeNsenter returns a Nsenter that does not run "nsenter --mount=... --",
 // but runs everything in the same mount namespace as the unit test binary.
 // rootfsPath is supposed to be a symlink, e.g. /tmp/xyz/rootfs -> /.
-// This fake NSEnter is enough for most operations, e.g. to resolve symlinks,
+// This fake Nsenter is enough for most operations, e.g. to resolve symlinks,
 // but it's not enough to call /bin/mount - unit tests don't run as root.
-func NewFakeNsenter(rootfsPath string) (*NSEnter, error) {
+func NewFakeNsenter(rootfsPath string) (*Nsenter, error) {
 	executor := &fakeExec{
 		rootfsPath: rootfsPath,
 	}
@@ -240,7 +219,7 @@ type fakeExec struct {
 }
 
 func (f fakeExec) Command(cmd string, args ...string) exec.Cmd {
-	// This will intentionaly panic if NSEnter does not provide enough arguments.
+	// This will intentionaly panic if Nsenter does not provide enough arguments.
 	realCmd := args[2]
 	realArgs := args[3:]
 	return exec.New().Command(realCmd, realArgs...)
@@ -255,4 +234,3 @@ func (fakeExec) CommandContext(ctx context.Context, cmd string, args ...string) 
 }
 
 var _ exec.Interface = fakeExec{}
-var _ exec.Interface = &NSEnter{}

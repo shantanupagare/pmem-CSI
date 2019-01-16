@@ -25,6 +25,7 @@ import (
 
 type AdmissionregistrationInterface interface {
 	RESTClient() rest.Interface
+	InitializerConfigurationsGetter
 	MutatingWebhookConfigurationsGetter
 	ValidatingWebhookConfigurationsGetter
 }
@@ -32,6 +33,10 @@ type AdmissionregistrationInterface interface {
 // AdmissionregistrationClient is used to interact with features provided by the admissionregistration.k8s.io group.
 type AdmissionregistrationClient struct {
 	restClient rest.Interface
+}
+
+func (c *AdmissionregistrationClient) InitializerConfigurations() InitializerConfigurationInterface {
+	return newInitializerConfigurations(c)
 }
 
 func (c *AdmissionregistrationClient) MutatingWebhookConfigurations() MutatingWebhookConfigurationInterface {

@@ -1,4 +1,5 @@
 Repo;Component;License
+bitbucket.org/ww/goautoneg;goautoneg;BSD-3-Clause
 github.com/Azure/go-ansiterm;go-ansiterm;MIT License
 github.com/NYTimes/gziphandler;NY Times gziphandler;Apache License 2.0
 github.com/PuerkitoBio/purell;purell;BSD 3-clause "New" or "Revised" License
