@@ -4,4 +4,4 @@ metadata:
   name: pmem-csi-sc
 provisioner: pmem-csi
 reclaimPolicy: Delete
-volumeBindingMode: Immediate
+volumeBindingMode: WaitForFirstConsumer
