@@ -175,7 +175,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			}
 			topology = append(topology, &csi.Topology{
 				Segments: map[string]string{
-					"kubernetes.io/hostname": cs.Driver.nodeID,
+					PmemTopologyKey: cs.Driver.nodeID,
 				},
 			})
 		} else /*if cs.mode == Controller */ {
@@ -205,7 +205,7 @@ func (cs *controllerServer) CreateVolume(ctx context.Context, req *csi.CreateVol
 			for _, id := range foundNodes {
 				topology = append(topology, &csi.Topology{
 					Segments: map[string]string{
-						"kubernetes.io/hostname": id,
+						PmemTopologyKey: id,
 					},
 				})
 			}

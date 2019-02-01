@@ -26,6 +26,9 @@ const (
 	connectionTimeout time.Duration = 10 * time.Second
 	retryTimeout      time.Duration = 10 * time.Second
 	requestTimeout    time.Duration = 10 * time.Second
+
+	//PmemTopologyKey represents the topology segmentname and region
+	PmemTopologyKey = "pmem-csi.intel.com/node"
 )
 
 type DriverMode string
