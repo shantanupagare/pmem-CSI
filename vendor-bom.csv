@@ -1,5 +1,4 @@
 Repo;Component;License
-bitbucket.org/ww/goautoneg;goautoneg;BSD-3-Clause
 github.com/Azure/go-ansiterm;go-ansiterm;MIT License
 github.com/NYTimes/gziphandler;NY Times gziphandler;Apache License 2.0
 github.com/PuerkitoBio/purell;purell;BSD 3-clause "New" or "Revised" License
@@ -94,5 +93,7 @@ k8s.io/klog;kubernetes glog;Apache License 2.0
 k8s.io/kube-aggregator;kubernetes kube-aggregator;Apache License 2.0
 k8s.io/kube-openapi;kubernetes kube-openapi;Apache License 2.0
 k8s.io/kubernetes;kubernetes;Apache License 2.0
+k8s.io/node-api;kubernetes;Apache License 2.0
 k8s.io/utils;kubernetes utils;Apache License 2.0
+sigs.k8s.io/structured-merge-diff;kubernetes;Apache License 2.0
 sigs.k8s.io/yaml;kubernetes yaml;MIT License

@@ -16,12 +16,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"k8s.io/klog/glog"
+	"k8s.io/utils/keymutex"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
-	"k8s.io/kubernetes/pkg/util/keymutex" // TODO: move to k8s.io/utils (https://github.com/kubernetes/utils/issues/62)
 )
 
 //VolumeStatus type representation for volume status

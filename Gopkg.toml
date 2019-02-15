@@ -96,6 +96,18 @@
   name = "k8s.io/kube-aggregator"
   branch = "master"
 
+# The version picked by dep is not compatible with
+# current Kubernetes master. This revision is what
+# Kubernetes currently uses.
+[[override]]
+  name = "sigs.k8s.io/structured-merge-diff"
+  revision = "e5e029740eb81ee0217ecf9d950c25a0eeb9688a"
+
+# Latest stable release v4.1.0 doesn't have the AccumulatedCopySizeLimit that Kubernetes master uses.
+[[override]]
+  name = "github.com/evanphx/json-patch"
+  branch = "master"
+
 # Doesn't do proper releases.
 [[override]]
   name = "k8s.io/kube-openapi"
