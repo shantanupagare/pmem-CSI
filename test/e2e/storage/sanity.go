@@ -17,9 +17,15 @@ limitations under the License.
 package storage
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 
+	"github.com/container-storage-interface/spec/lib/go/csi"
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
@@ -120,6 +126,101 @@ var _ = Describe("sanity", func() {
 	// This adds several tests that just get skipped.
 	// TODO: static definition of driver capabilities (https://github.com/kubernetes-csi/csi-test/issues/143)
 	sanity.GinkgoTest(&config)
+
+	Context("node", func() {
+		sc := &sanity.SanityContext{
+			Config: &config,
+		}
+		var (
+			cs     clientset.Interface
+			cl     *sanity.Cleanup
+			c      csi.NodeClient
+			s, sn  csi.ControllerClient
+			nodeID string
+		)
+
+		BeforeEach(func() {
+			sc.Setup()
+			cs = f.ClientSet
+			c = csi.NewNodeClient(sc.Conn)
+			s = csi.NewControllerClient(sc.ControllerConn)
+			sn = csi.NewControllerClient(sc.Conn) // This works because PMEM-CSI exposes the node, controller, and ID server via its csi.sock.
+			cl = &sanity.Cleanup{
+				Context:                    sc,
+				NodeClient:                 c,
+				ControllerClient:           s,
+				ControllerPublishSupported: true,
+				NodeStageSupported:         true,
+			}
+			nid, err := c.NodeGetInfo(
+				context.Background(),
+				&csi.NodeGetInfoRequest{})
+			framework.ExpectNoError(err, "get node ID")
+			nodeID = nid.GetNodeId()
+		})
+
+		AfterEach(func() {
+			cl.DeleteVolumes()
+			sc.Teardown()
+		})
+
+		It("stores state across reboots for single volume", func() {
+			namePrefix := "state-volume"
+
+			// We intentionally check the state of the controller on the node here.
+			// The master caches volumes and does not get rebooted.
+			initialVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+			framework.ExpectNoError(err, "list volumes")
+
+			_, vol := createVolume(s, sc, cl, namePrefix)
+			createdVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+			Expect(createdVolumes.Entries).To(HaveLen(len(initialVolumes.Entries)+1), "one more volume")
+
+			// Restart.
+			restartNode(cs, nodeID)
+
+			// Once we get an answer, it is expected to be the same as before.
+			By("checking volumes")
+			Eventually(func() bool {
+				restartedVolumes, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				if err != nil {
+					return false
+				}
+				Expect(restartedVolumes.Entries).To(ConsistOf(createdVolumes.Entries), "same volumes as before node reboot")
+				return true
+			}, "5m", "1s").Should(BeTrue(), "list volumes")
+
+			deleteVolume(s, vol)
+		})
+
+		It("can mount again after reboot", func() {
+			namePrefix := "mount-volume"
+
+			name, vol := createVolume(s, sc, cl, namePrefix)
+			// Publish for the second time.
+			nodeID := publishVolume(s, c, sc, cl, name, vol)
+
+			// Restart.
+			restartNode(cs, nodeID)
+			Eventually(func() bool {
+				_, err := sn.ListVolumes(context.Background(), &csi.ListVolumesRequest{})
+				if err != nil {
+					return false
+				}
+				return true
+			}, "5m", "1s").Should(BeTrue(), "node controller running again")
+
+			// No failure, is already unpublished.
+			// TODO: In practice this fails with "no mount point specified".
+			unpublishVolume(s, c, sc, vol, nodeID)
+
+			// Publish for the second time.
+			publishVolume(s, c, sc, cl, name, vol)
+
+			unpublishVolume(s, c, sc, vol, nodeID)
+			deleteVolume(s, vol)
+		})
+	})
 })
 
 func getServicePort(cs clientset.Interface, serviceName string) int32 {
@@ -165,4 +266,202 @@ func getDaemonSet(cs clientset.Interface, setName string) *appsv1.DaemonSet {
 		return set != nil
 	}, "3m").Should(BeTrue(), "%s pod running", setName)
 	return set
+}
+
+func createVolume(s csi.ControllerClient, sc *sanity.SanityContext, cl *sanity.Cleanup, namePrefix string) (string, *csi.Volume) {
+	var err error
+	name := sanity.UniqueString(namePrefix)
+
+	// Create Volume First
+	By("creating a single node writer volume")
+	vol, err := s.CreateVolume(
+		context.Background(),
+		&csi.CreateVolumeRequest{
+			Name: name,
+			VolumeCapabilities: []*csi.VolumeCapability{
+				{
+					AccessType: &csi.VolumeCapability_Mount{
+						Mount: &csi.VolumeCapability_MountVolume{},
+					},
+					AccessMode: &csi.VolumeCapability_AccessMode{
+						Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+					},
+				},
+			},
+			Parameters: sc.Config.TestVolumeParameters,
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(vol).NotTo(BeNil())
+	Expect(vol.GetVolume()).NotTo(BeNil())
+	Expect(vol.GetVolume().GetVolumeId()).NotTo(BeEmpty())
+	cl.RegisterVolume(name, sanity.VolumeInfo{VolumeID: vol.GetVolume().GetVolumeId()})
+
+	return name, vol.GetVolume()
+}
+
+func publishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityContext, cl *sanity.Cleanup, name string, vol *csi.Volume) string {
+	var err error
+
+	By("getting a node id")
+	nid, err := c.NodeGetInfo(
+		context.Background(),
+		&csi.NodeGetInfoRequest{})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(nid).NotTo(BeNil())
+	Expect(nid.GetNodeId()).NotTo(BeEmpty())
+
+	var conpubvol *csi.ControllerPublishVolumeResponse
+	By("controller publishing volume")
+
+	conpubvol, err = s.ControllerPublishVolume(
+		context.Background(),
+		&csi.ControllerPublishVolumeRequest{
+			VolumeId: vol.GetVolumeId(),
+			NodeId:   nid.GetNodeId(),
+			VolumeCapability: &csi.VolumeCapability{
+				AccessType: &csi.VolumeCapability_Mount{
+					Mount: &csi.VolumeCapability_MountVolume{},
+				},
+				AccessMode: &csi.VolumeCapability_AccessMode{
+					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+				},
+			},
+			VolumeContext: vol.GetVolumeContext(),
+			Readonly:      false,
+			Secrets:       sc.Secrets.ControllerPublishVolumeSecret,
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	cl.RegisterVolume(name, sanity.VolumeInfo{VolumeID: vol.GetVolumeId(), NodeID: nid.GetNodeId()})
+	Expect(conpubvol).NotTo(BeNil())
+
+	By("node staging volume")
+	nodestagevol, err := c.NodeStageVolume(
+		context.Background(),
+		&csi.NodeStageVolumeRequest{
+			VolumeId: vol.GetVolumeId(),
+			VolumeCapability: &csi.VolumeCapability{
+				AccessType: &csi.VolumeCapability_Mount{
+					Mount: &csi.VolumeCapability_MountVolume{},
+				},
+				AccessMode: &csi.VolumeCapability_AccessMode{
+					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+				},
+			},
+			StagingTargetPath: sc.StagingPath,
+			VolumeContext:     vol.GetVolumeContext(),
+			PublishContext:    conpubvol.GetPublishContext(),
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(nodestagevol).NotTo(BeNil())
+
+	// NodePublishVolume
+	By("publishing the volume on a node")
+	nodepubvol, err := c.NodePublishVolume(
+		context.Background(),
+		&csi.NodePublishVolumeRequest{
+			VolumeId:          vol.GetVolumeId(),
+			TargetPath:        sc.TargetPath + "/target",
+			StagingTargetPath: sc.StagingPath,
+			VolumeCapability: &csi.VolumeCapability{
+				AccessType: &csi.VolumeCapability_Mount{
+					Mount: &csi.VolumeCapability_MountVolume{},
+				},
+				AccessMode: &csi.VolumeCapability_AccessMode{
+					Mode: csi.VolumeCapability_AccessMode_SINGLE_NODE_WRITER,
+				},
+			},
+			VolumeContext:  vol.GetVolumeContext(),
+			PublishContext: conpubvol.GetPublishContext(),
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(nodepubvol).NotTo(BeNil())
+
+	return nid.GetNodeId()
+}
+
+func unpublishVolume(s csi.ControllerClient, c csi.NodeClient, sc *sanity.SanityContext, vol *csi.Volume, nodeID string) {
+	var err error
+
+	// NodeUnpublishVolume
+	By("cleaning up calling nodeunpublish")
+	nodeunpubvol, err := c.NodeUnpublishVolume(
+		context.Background(),
+		&csi.NodeUnpublishVolumeRequest{
+			VolumeId:   vol.GetVolumeId(),
+			TargetPath: sc.TargetPath + "/target",
+		})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(nodeunpubvol).NotTo(BeNil())
+
+	By("cleaning up calling nodeunstage")
+	nodeunstagevol, err := c.NodeUnstageVolume(
+		context.Background(),
+		&csi.NodeUnstageVolumeRequest{
+			VolumeId:          vol.GetVolumeId(),
+			StagingTargetPath: sc.StagingPath,
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(nodeunstagevol).NotTo(BeNil())
+
+	By("cleaning up calling controllerunpublishing")
+	controllerunpubvol, err := s.ControllerUnpublishVolume(
+		context.Background(),
+		&csi.ControllerUnpublishVolumeRequest{
+			VolumeId: vol.GetVolumeId(),
+			NodeId:   nodeID,
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(controllerunpubvol).NotTo(BeNil())
+}
+
+func deleteVolume(s csi.ControllerClient, vol *csi.Volume) {
+	var err error
+
+	By("cleaning up deleting the volume")
+	_, err = s.DeleteVolume(
+		context.Background(),
+		&csi.DeleteVolumeRequest{
+			VolumeId: vol.GetVolumeId(),
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+var unreachable = v1.Taint{Key: "node.kubernetes.io/unreachable", Effect: "NoSchedule"}
+
+// restartNode works only for one of the nodes in the QEMU virtual cluster.
+// It does a hard poweroff via SysRq and relies on Docker to restart the
+// "failed" node.
+func restartNode(cs clientset.Interface, nodeID string) {
+	if !regexp.MustCompile(`worker\d+$`).MatchString(nodeID) {
+		framework.Skipf("node %q not one of the expected QEMU nodes (worker<number>))", nodeID)
+	}
+	node := strings.Split(nodeID, "worker")[1]
+	ssh := fmt.Sprintf("%s/_work/%s/ssh.%s",
+		os.Getenv("REPO_ROOT"),
+		os.Getenv("CLUSTER"),
+		node)
+	out, err := exec.Command(ssh, "uptime", "--since").CombinedOutput()
+	framework.ExpectNoError(err, "original %s uptime --since:\n%s", ssh, string(out))
+	originalStartTime := string(out)
+
+	// Shutdown via SysRq b (https://major.io/2009/01/29/linux-emergency-reboot-or-shutdown-with-magic-commands/).
+	shutdown := exec.Command(ssh)
+	shutdown.Stdin = bytes.NewBufferString(`echo 1 > /proc/sys/kernel/sysrq
+echo b > /proc/sysrq-trigger`)
+	out, err = shutdown.CombinedOutput()
+	framework.ExpectNoError(err, "shutdown via %s:\n%s", ssh, string(out))
+
+	// Wait for node to reboot. We know that the node has rebooted once we can log in (again)
+	// and it has a different start time than before.
+	Eventually(func() bool {
+		out, err := exec.Command(ssh, "uptime", "--since").CombinedOutput()
+		return err == nil && string(out) != originalStartTime
+	}, "5m", "1s").Should(Equal(true), "node up again")
 }

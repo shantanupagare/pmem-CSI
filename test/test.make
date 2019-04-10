@@ -110,6 +110,7 @@ space:= $(empty) $(empty)
 test_e2e: start
 	KUBECONFIG=`pwd`/_work/$(CLUSTER)/kube.config \
 	REPO_ROOT=`pwd` \
+	CLUSTER=$(CLUSTER) \
 	go test -count=1 -timeout 0 -v ./test/e2e -ginkgo.skip='$(subst $(space),|,$(TEST_E22_SKIP))'
 
 .PHONY: run_tests
