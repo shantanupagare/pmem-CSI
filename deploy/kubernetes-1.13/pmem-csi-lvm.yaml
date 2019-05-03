@@ -226,25 +226,6 @@ spec:
     spec:
       containers:
       - args:
-        - --v=5
-        - --csi-address=/csi/csi-controller.sock
-        - --feature-gates=Topology=true
-        image: quay.io/k8scsi/csi-provisioner:v1.0.1
-        imagePullPolicy: Always
-        name: external-provisioner
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
-      - args:
-        - --v=5
-        - --csi-address=/csi/csi-controller.sock
-        image: quay.io/k8scsi/csi-attacher:v1.0.1
-        imagePullPolicy: Always
-        name: external-attacher
-        volumeMounts:
-        - mountPath: /csi
-          name: plugin-socket-dir
-      - args:
         - -v=5
         - -drivername=pmem-csi.intel.com
         - -mode=controller
@@ -271,6 +252,25 @@ spec:
         volumeMounts:
         - mountPath: /certs/
           name: registry-cert
+        - mountPath: /csi
+          name: plugin-socket-dir
+      - args:
+        - --v=5
+        - --csi-address=/csi/csi-controller.sock
+        - --feature-gates=Topology=true
+        image: quay.io/k8scsi/csi-provisioner:v1.0.1
+        imagePullPolicy: Always
+        name: external-provisioner
+        volumeMounts:
+        - mountPath: /csi
+          name: plugin-socket-dir
+      - args:
+        - --v=5
+        - --csi-address=/csi/csi-controller.sock
+        image: quay.io/k8scsi/csi-attacher:v1.0.1
+        imagePullPolicy: Always
+        name: external-attacher
+        volumeMounts:
         - mountPath: /csi
           name: plugin-socket-dir
       serviceAccount: pmem-csi-controller
