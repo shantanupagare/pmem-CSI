@@ -1,5 +1,5 @@
 TEST_CMD=go test
-TEST_ARGS=$(IMPORT_PATH)/cmd/... $(IMPORT_PATH)/pkg/...
+TEST_ARGS=$(IMPORT_PATH)/pkg/...
 
 .PHONY: vet
 test: vet
