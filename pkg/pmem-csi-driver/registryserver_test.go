@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -72,6 +73,7 @@ var _ = Describe("pmem registry", func() {
 		registryClientConn, err = pmemgrpc.Connect(registryServerEndpoint, tlsConfig, 10*time.Second)
 		Expect(err).NotTo(HaveOccurred())
 		registryClient = registry.NewRegistryClient(registryClientConn)
+		Expect(registryClient).ShouldNot(BeNil())
 	})
 
 	AfterEach(func() {
@@ -101,8 +103,6 @@ var _ = Describe("pmem registry", func() {
 		)
 
 		It("Register node controller", func() {
-			Expect(registryClient).ShouldNot(BeNil())
-
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := registryClient.RegisterController(ctx, &registerReq)
@@ -113,8 +113,6 @@ var _ = Describe("pmem registry", func() {
 		})
 
 		It("Unregister node controller", func() {
-			Expect(registryClient).ShouldNot(BeNil())
-
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := registryClient.RegisterController(ctx, &registerReq)
@@ -130,12 +128,29 @@ var _ = Describe("pmem registry", func() {
 		})
 
 		It("Unregister non existing node controller", func() {
-			Expect(registryClient).ShouldNot(BeNil())
-
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			_, err := registryClient.UnregisterController(ctx, &unregisterReq)
 			Expect(err.Error()).To(ContainSubstring("No entry with id '" + nodeId + "' found in registry"))
+		})
+
+		It("protect against concurrent access", func() {
+			ctx := context.Background()
+			var wg sync.WaitGroup
+			wg.Add(2)
+			register := func() {
+				defer wg.Done()
+				// The Go race detector will see two accesses to the same
+				// global data in the registry server from two different
+				// go routines and warn about it unless the data is
+				// protected by a lock.
+				registryClient.RegisterController(ctx, &registerReq)
+			}
+			go register()
+			go register()
+			wg.Wait()
+
+			time.Sleep(60 * time.Second)
 		})
 	})
 

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -156,6 +157,34 @@ func (pmemd *pmemDriver) Run() error {
 	if pmemd.cfg.Mode == Controller {
 		rs := NewRegistryServer(pmemd.clientTLSConfig)
 		cs := NewMasterControllerServer(rs)
+
+		// Trigger the race detector to verify that it is active.
+		// TODO: remove this
+		if true {
+			registerReq := registry.RegisterControllerRequest{
+				NodeId:   "foo",
+				Endpoint: "bar",
+			}
+			var wg sync.WaitGroup
+			wg.Add(2)
+			register := func() {
+				defer wg.Done()
+				// The Go race detector will see two accesses to the same
+				// global data in the registry server from two different
+				// go routines and warn about it unless the data is
+				// protected by a lock.
+				rs.RegisterController(context.Background(), &registerReq)
+			}
+			go register()
+			go register()
+			wg.Wait()
+
+			// Keep testing.
+			go func() {
+				rs.RegisterController(context.Background(), &registerReq)
+				time.Sleep(30 * time.Second)
+			}()
+		}
 
 		if pmemd.cfg.Endpoint != pmemd.cfg.RegistryEndpoint {
 			if err := s.Start(pmemd.cfg.Endpoint, nil, ids, cs); err != nil {

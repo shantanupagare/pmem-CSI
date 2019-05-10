@@ -3,6 +3,7 @@ package pmemcsidriver
 import (
 	"crypto/tls"
 	"fmt"
+	"runtime/debug"
 	"time"
 
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
@@ -66,7 +67,8 @@ func (rs *registryServer) RegisterController(ctx context.Context, req *registry.
 	if req.GetEndpoint() == "" {
 		return nil, status.Error(codes.InvalidArgument, "Missing endpoint address")
 	}
-	glog.V(3).Infof("Registering node: %s, endpoint: %s", req.NodeId, req.Endpoint)
+	stack := debug.Stack()
+	glog.V(3).Infof("Registering node: %s, endpoint: %s at %s", req.NodeId, req.Endpoint, string(stack))
 
 	rs.nodeClients[req.NodeId] = NodeInfo{
 		NodeID:   req.NodeId,

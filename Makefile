@@ -71,7 +71,7 @@ $(CMDS):
 # additional "-run" parameters. In contrast to the normal it then also
 # supports -test.coverprofile.
 $(TEST_CMDS): %-test:
-	GOOS=linux go test --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
+	GOOS=linux go test --race --cover -covermode=atomic -c -coverpkg=./pkg/... -ldflags '-X github.com/intel/pmem-csi/pkg/$*.version=${VERSION}' -o ${OUTPUT_DIR}/$@ ./cmd/$*
 
 # The default is to refresh the base image once a day when building repeatedly.
 # This is achieved by passing a fake variable that changes its value once per day.
