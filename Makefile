@@ -83,7 +83,7 @@ clean:
 # All clusters called "clear-kvm[-something]" are created with
 # test/clear-kvm.make. They run inside QEMU and share the
 # same IP addresses, and thus cannot run in parallel.
-CLUSTER := clear-kvm
+CLUSTER := clear-govm
 include test/clear-kvm.make
 include test/start-stop.make
 include test/test.make
