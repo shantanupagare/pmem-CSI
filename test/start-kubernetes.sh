@@ -206,7 +206,7 @@ function init_kubernetes_cluster(){
 	workers_ip=""
 	master_ip="$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}-master'") "IP"}}')"
 	join_token=""
-	setup_script="setup-${CLOUD_IMAGE}-govm.sh"
+	setup_script="setup-${CLOUD_USER}-govm.sh"
         install_k8s_script="setup-kubernetes.sh"
 	KUBECONFIG=${WORKING_DIRECTORY}/kube.config
 	echo "Installing dependencies on cloud images, this process may take some minutes"
