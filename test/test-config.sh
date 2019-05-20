@@ -2,7 +2,7 @@
 # some common settings.
 
 # Cluster directory name where the deployment files will be stored
-CLUSTER=clear-govm
+CLUSTER=${CLUSTER:-clear-govm}
 
 # The container runtime that is meant to be used inside Clear Linux.
 # Possible values are "docker" and "crio".

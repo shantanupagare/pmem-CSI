@@ -1,6 +1,6 @@
 #!/bin/bash
 # Implements the first-boot configuration of the different virtual machines.
-# See clear-kvm.make for details.
+# See clear-govm.make for details.
 set -x
 set -o errexit
 set -o pipefail

@@ -88,7 +88,7 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 # Done.
 #( echo "Use $(pwd)/kube.config as KUBECONFIG to access the running cluster." ) 2>/dev/null
-#_work/ssh-clear-kvm.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >_work/kube.config
+#_work/ssh-clear-govm.0 'cat /etc/kubernetes/admin.conf' | sed -e "s;https://.*:6443;https://${TEST_IP_ADDR}.2:6443;" >_work/kube.config
 
 # Verify that Kubernetes works by starting it and then listing pods.
 # We also wait for the node to become ready, which can take a while because

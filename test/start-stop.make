@@ -12,11 +12,11 @@ start: test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
 	@ echo "The test cluster is ready. Log in with _work/ssh-$(CLUSTER), run kubectl once logged in."
 	@ echo "Alternatively, KUBECONFIG=$$(pwd)/_work/$(CLUSTER)/kube.config can also be used directly."
 	@ echo "To try out the pmem-csi driver persistent volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc.yaml | _work/ssh-$(CLUSTER) kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app.yaml | _work/ssh-$(CLUSTER) kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc.yaml | _work/$(CLUSTER)/ssh-$(CLUSTER) kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app.yaml | _work/$(CLUSTER)/ssh-$(CLUSTER) kubectl create -f -"
 	@ echo "To try out the pmem-csi driver cache volumes:"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc-cache.yaml | _work/ssh-$(CLUSTER) kubectl create -f -"
-	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app-cache.yaml | _work/ssh-$(CLUSTER) kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-pvc-cache.yaml | _work/$(CLUSTER)/ssh-$(CLUSTER) kubectl create -f -"
+	@ echo "   cat deploy/kubernetes-$$(cat _work/$(CLUSTER)/kubernetes.version)/pmem-app-cache.yaml | _work/$(CLUSTER)/ssh-$(CLUSTER) kubectl create -f -"
 
 stop:
 	. test/test-config.sh && \
