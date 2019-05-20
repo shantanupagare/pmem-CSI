@@ -649,10 +649,10 @@ The DeviceMode (lvm or direct) used in testing is selected using variable TEST_D
 test cluster node which are handy for running a single command or to
 start interactive shell. Examples:
 
-`_work/clear-kvm/ssh-pmem-csi-clear-govm-master kubectl get pods` runs a kubectl command on
+`_work/clear-kvm/ssh.0 kubectl get pods` runs a kubectl command on
 k8s-test-pmem-master which is cluster master.
 
-`_work/clear-kvm/ssh-pmem-csi-clear-govm-worker1` starts a shell on k8s-test-pmem-worker-1.
+`_work/clear-kvm/ssh.1` starts a shell on k8s-test-pmem-worker-1.
 
 ### Running E2E tests
 

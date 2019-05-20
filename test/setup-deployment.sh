@@ -2,7 +2,6 @@
 
 set -o errexit
 set -o pipefail
-set -x
 
 CLUSTER=${CLUSTER:-clear-govm}
 REPO_DIRECTORY="${REPO_DIRECTORY:-$(dirname $(dirname $(readlink -f $0)))}"
@@ -21,6 +20,7 @@ DEPLOYMENT_FILES=(
         pmem-storageclass-cache.yaml
 )
 
+echo "$KUBERNETES_VERSION" > $WORK_DIRECTORY/kubernetes.version
 for deployment_file in ${DEPLOYMENT_FILES[@]}; do
 	sed "s|${TEMPLATE_IP}|${REGISTRY_IP}|g" ${DEPLOYMENT_DIRECTORY}/${deployment_file} | ${KUBECTL} apply -f -
 done

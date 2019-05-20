@@ -35,7 +35,7 @@ EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
 CLOUD_USER=${CLOUD_USER:-clear}
 CLOUD_IMAGE="${CLOUD_IMAGE:-$(\
 		curl -s https://download.clearlinux.org/image/latest-images |\
-		awk '/cloud/ {gsub(".xz",""); print $0}')}"
+		awk '/cloud.img/ {gsub(".xz",""); print $0}')}"
 IMAGE_URL=${IMAGE_URL:-http://download.clearlinux.org/image/${CLOUD_IMAGE}.xz}
 SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
@@ -46,7 +46,7 @@ CHECK_SIGNED_FILES=${CHECK_SIGNED_FILES:-true}
 
 function error_handler(){
 	local line="${1}"
-	echo  "Running the ${BASH_COMMAND} on function ${FUNCNAME[1]} at line ${line}"
+	echo  "Error unning the ${BASH_COMMAND} on function ${FUNCNAME[1]} at line ${line}"
 	delete_vms
 }
 
@@ -137,17 +137,18 @@ function create_govm_yaml(){
 
 function create_vms(){
 	trap 'error_handler ${LINENO}' ERR
-	DELETE_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
+	STOP_VMS_SCRIPT="${WORKING_DIRECTORY}/stop.sh"
 	RESTART_VMS_SCRIPT="${WORKING_DIRECTORY}/restart.sh"
 	create_govm_yaml
 	govm compose -f ${GOVM_YAML}
-	IPS=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "IP"}}')
+	IPS=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "IP"}}' | tac)
 
 	#Create scripts to delete virtual machines
-	echo "#!/bin/bash -e" > $DELETE_VMS_SCRIPT
+	echo "#!/bin/bash -e" > $STOP_VMS_SCRIPT
 	govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}' \
-		| xargs -L1 echo govm remove >> $DELETE_VMS_SCRIPT
-	chmod +x $DELETE_VMS_SCRIPT
+		| xargs -L1 echo govm remove >> $STOP_VMS_SCRIPT
+	echo "rm -rf ${WORKING_DIRECTORY}" >> $STOP_VMS_SCRIPT
+	chmod +x $STOP_VMS_SCRIPT
 
 	#Create script to restart virtual machines
 	cat <<-EOF>$RESTART_VMS_SCRIPT
@@ -156,7 +157,7 @@ function create_vms(){
 	for ip in $(echo ${IPS}); do
 		ssh $SSH_ARGS ${CLOUD_USER}@\${ip} "sudo systemctl reboot"
 	done
-	echo "Waitig for ssh connectivity"
+	echo "Waiting for ssh connectivity"
 	for ip in $(echo ${IPS}); do
 		while ! ssh $SSH_ARGS ${CLOUD_USER}@\${ip} exit 2>/dev/null; do
 			if [ "\$SECONDS" -gt "$SSH_TIMEOUT" ]; then
@@ -165,7 +166,7 @@ function create_vms(){
 			fi
 		done
 	done
-	while ! ${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get pods"; do
+	while ! ${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get pods" 2>/dev/null; do
 		sleep 1
 		if [ \$SECONDS -gt $SSH_TIMEOUT ]; then
 			break
@@ -176,7 +177,7 @@ function create_vms(){
 		sleep 3
 		pending_nodes=\$(${WORKING_DIRECTORY}/ssh-${CLUSTER} "kubectl get nodes  -o go-template \
 		--template='{{range .items}}{{range .status.conditions }}{{if eq .type \"Ready\"}} \
-		{{if ne .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'")
+		{{if ne .status \"True\"}}{{printf \"%s\n\" .reason}}{{end}}{{end}}{{end}}{{end}}'"2>/dev/null)
 		if [ -z "\$pending_nodes" ]; then
 			break
 		fi
@@ -210,10 +211,12 @@ function init_kubernetes_cluster(){
         install_k8s_script="setup-kubernetes.sh"
 	KUBECONFIG=${WORKING_DIRECTORY}/kube.config
 	echo "Installing dependencies on cloud images, this process may take some minutes"
+	vm_id=0
 	for ip in ${IPS}; do
 		vm_name=$(govm list -f '{{select (filterRegexp . "IP" "'${ip}'") "Name"}}')
 		log_name=${WORKING_DIRECTORY}/${vm_name}.log
-		ssh_script=${WORKING_DIRECTORY}/ssh-$vm_name
+		ssh_script=${WORKING_DIRECTORY}/ssh.${vm_id}
+		((vm_id=vm_id+1))
 		if [[ "$vm_name" = *"worker"* ]]; then
 			workers_ip+="$ip "
 		else
@@ -274,9 +277,9 @@ function init_workdir(){
         mkdir -p $RESOURCES_DIRECTORY
     fi
 	if [ ! -e  "$SSH_KEY" ]; then
-		ssh-keygen -N '' -f ${SSH_KEY}
+		ssh-keygen -N '' -f ${SSH_KEY} &>/dev/null
 	fi
-	pushd $WORKING_DIRECTORY
+	pushd $WORKING_DIRECTORY >/dev/null
 }
 
 function check_status(){
