@@ -196,7 +196,7 @@ function create_vms(){
 				exit 1
 			fi
 		done
-		echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"sudo systemctl reboot\"" >> $RESTART_VMS_SCRIPT
+		echo "ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"sudo systemctl reboot\"" >> $RESTART_VMS_SCRIPT
 	done
 	PROXY_ENV="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY'"
 }
