@@ -240,10 +240,10 @@ function init_kubernetes_cluster(){
 		echo "Saving $image"
 		docker save localhost:5000/$image:$IMAGE_TAG > ${WORKING_DIRECTORY}/$image
 		echo Coying image $image to master node
-		scp $SSH_ARGS $image ${CLOUD_USER}@${ip}:.
+		scp $SSH_ARGS $image ${CLOUD_USER}@${master_ip}:.
 		echo Load $image into registry
-		ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo docker load < $image"
-		ssh $SSH_ARGS ${CLOUD_USER}@${ip} "sudo docker push localhost:5000/$image:$IMAGE_TAG"
+		ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "sudo docker load < $image"
+		ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "sudo docker push localhost:5000/$image:$IMAGE_TAG"
 		rm ${WORKING_DIRECTORY}/$image
         done
     fi
