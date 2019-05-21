@@ -1,7 +1,7 @@
 # Brings up the emulator environment:
 # - starts a Kubernetes cluster with NVDIMMs as described in https://github.com/qemu/qemu/blob/bd54b11062c4baa7d2e4efadcf71b8cfd55311fd/docs/nvdimm.txt
 # - generate pmem secrets if necessary
-start: test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp
+start: test/setup-ca-kubernetes.sh _work/.setupcfssl-stamp _work/govm
 	. test/test-config.sh && \
 	test/start-kubernetes.sh && \
 	if ! [ -e _work/$(CLUSTER)/secretsdone ] || [ $$(_work/$(CLUSTER)/ssh-$(CLUSTER) kubectl get secrets | grep -e pmem-csi-node-secrets -e pmem-csi-registry-secrets | wc -l) -ne 2 ]; then \

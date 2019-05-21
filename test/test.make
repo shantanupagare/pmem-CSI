@@ -118,6 +118,17 @@ run_tests: all _work/pmem-ca/.ca-stamp _work/evil-ca/.ca-stamp
 	TEST_WORK=$(abspath _work) \
 	$(TEST_CMD) $(shell go list $(TEST_ARGS) | sed -e 's;$(IMPORT_PATH);.;')
 
+GOVM_VERSION=1166148359ed9b4b83df555e528aad3cd1144ed3
+ _work/govm:
+	if [ ! -e '_work/bin/govm' ]; then \
+		tmpdir=`mktemp -d` && \
+		trap 'rm -r $$tmpdir' EXIT && \
+		cd $$tmpdir && \
+		echo "module govm" > go.mod && \
+		go get -v github.com/govm-project/govm@$(GOVM_VERSION) && \
+		go build -o $(abspath _work/bin/govm) github.com/govm-project/govm;\
+	fi
+
 _work/%/.ca-stamp: test/setup-ca.sh _work/.setupcfssl-stamp
 	rm -rf $(@D)
 	WORKDIR='$(@D)' PATH='$(PWD)/_work/bin/:$(PATH)' CA='$*' EXTRA_CNS="wrong-node-controller" $<
