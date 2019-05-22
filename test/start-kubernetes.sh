@@ -35,8 +35,8 @@ EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
 CLOUD_USER=${CLOUD_USER:-clear}
 CLOUD_IMAGE="${CLOUD_IMAGE:-$(\
 		curl -s https://download.clearlinux.org/image/latest-images |\
-		awk '/cloud.img/ {gsub(".xz",""); print $0}')}"
-IMAGE_URL=${IMAGE_URL:-http://download.clearlinux.org/image/${CLOUD_IMAGE}.xz}
+		awk '/cloud.img/ {print $0}')}"
+IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
 SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
 	-oUserKnownHostsFile=/dev/null -oLogLevel=error \
@@ -52,38 +52,38 @@ function error_handler(){
 
 function download_image(){
     pushd $RESOURCES_DIRECTORY &>/dev/null
-	if [ -e "$CLOUD_IMAGE" ]; then
+	if [ -e "${CLOUD_IMAGE/.xz}" ]; then
 		echo "$CLOUD_IMAGE found, skipping download"
+		CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
 	else
 		case $CLOUD_USER in
 			clear)
-				ca_url="https://cdn.download.clearlinux.org/"
-				ca_url+="releases/${IMAGE_URL//[^0-9]}/"
-				ca_url+="clear/ClearLinuxRoot.pem"
-				echo "Downloading ${CLOUD_IMAGE}.xz image"
-				curl -O ${IMAGE_URL}
-				curl -s -O ${IMAGE_URL}-SHA512SUMS
-				curl -s -O ${IMAGE_URL}-SHA512SUMS.sig
-				curl -s -O ${ca_url}
+				echo "Downloading ${CLOUD_IMAGE} image"
+				curl -O ${IMAGE_URL}/${CLOUD_IMAGE}
 				if [ "$CHECK_SIGNED_FILES" = "true" ]; then
-					if openssl smime -verify \
-					-in "${CLOUD_IMAGE}.xz-SHA512SUMS.sig" \
+					curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS
+					curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig
+					curl -s -O ${IMAGE_URL}/ClearLinuxRoot.pem
+					if ! openssl smime -verify \
+					-in "${CLOUD_IMAGE}-SHA512SUMS.sig" \
 					-inform DER \
-					-content "${CLOUD_IMAGE}.xz-SHA512SUMS" \
+					-content "${CLOUD_IMAGE}-SHA512SUMS" \
 					-CAfile "ClearLinuxRoot.pem"; then
-						unxz "${CLOUD_IMAGE}.xz"
-					else
 						cat <<-EOF
-						Image verification failed, does not work at the moment,
-						(https://github.com/clearlinux/distribution/issues/85)
-						to skip image verification run:
-							CHECK_SIGNED_FILES=false make start
+						Image verification failed, see error above.
+
+						"unsupported certificate purpose" is a known issue caused by an incompatible openssl
+						version (https://github.com/clearlinux/distribution/issues/85). Other errors might indicate
+						a download error or man-in-the-middle attack.
+
+						To skip image verification run:
+						CHECK_SIGNED_FILES=false make start
 						EOF
 						exit 2
 					fi
-				elif [ "$CHECK_SIGNED_FILES" = "false" ]; then
-					unxz "${CLOUD_IMAGE}.xz"
 				fi
+				unxz ${CLOUD_IMAGE}
+				CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
 				;;
 			ubuntu)
 				base_url="https://cloud-images.ubuntu.com/disco/current/"
@@ -92,6 +92,7 @@ function download_image(){
 				curl -s -O ${base_url}/${sha_file}
 				if sha256sum $sha_file ${CLOUD_IMAGE}.xz; then
 					unxz ${CLOUD_IMAGE}.xz
+					CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
 				fi
 				;;
 			centos)
@@ -101,6 +102,7 @@ function download_image(){
 				curl -s -O ${base_url}/${sha_file}
 				if sha256sum $sha_file ${CLOUD_IMAGE}.xz; then
 					unxz ${CLOUD_IMAGE}.xz
+					CLOUD_IMAGE=${CLOUD_IMAGE/.xz}
 				fi
 				;;
 		esac
