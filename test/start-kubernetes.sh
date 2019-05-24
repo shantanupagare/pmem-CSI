@@ -13,6 +13,7 @@ REPO_DIRECTORY=${REPO_DIRECTORY:-$(dirname $TEST_DIRECTORY)}
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
 WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
+REGISTRY_NAME=${REGISTRY_NAME:-localhost:5000}
 source ${TEST_CONFIG}
 NODES=( $DEPLOYMENT_ID-master
 	$DEPLOYMENT_ID-worker1
@@ -212,6 +213,7 @@ function init_kubernetes_cluster(){
 	setup_script="setup-${CLOUD_USER}-govm.sh"
         install_k8s_script="setup-kubernetes.sh"
 	KUBECONFIG=${WORKING_DIRECTORY}/kube.config
+	TEST_INSECURE_REGISTRIES=${TEST_INSECURE_REGISTRIES:-$master_ip:5000}
 	echo "Installing dependencies on cloud images, this process may take some minutes"
 	vm_id=0
 	for ip in ${IPS}; do
@@ -225,7 +227,7 @@ function init_kubernetes_cluster(){
 			echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 			chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 		fi
-		ENV_VARS="$PROXY_ENV 'HOSTNAME=$vm_name' 'TEST_FEATURE_GATES=$TEST_FEATURE_GATES' 'TEST_INSECURE_REGISTRIES=$TEST_INSECURE_REGISTRIES' 'CREATE_REGISTRY=$CREATE_REGISTRY' 'TEST_CLEAR_LINUX_BUNDLES=$TEST_CLEAR_LINUX_BUNDLES' 'TEST_IP_ADDR=$master_ip' 'IPADDR=$ip'"
+		ENV_VARS="$PROXY_ENV 'HOSTNAME=$vm_name' 'TEST_FEATURE_GATES=$TEST_FEATURE_GATES' 'TEST_INSECURE_REGISTRIES=$TEST_INSECURE_REGISTRIES' 'CREATE_REGISTRY=$CREATE_REGISTRY' 'TEST_CLEAR_LINUX_BUNDLES=$TEST_CLEAR_LINUX_BUNDLES' 'IPADDR=$ip'"
 		scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null
 		ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(sed -e "s/^/$vm_name: /" | tee -a $log_name ) &
 		echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > $ssh_script
@@ -240,7 +242,7 @@ function init_kubernetes_cluster(){
 	images=( pmem-csi-driver pmem-vgm pmem-ns-init)
 	for image in "${images[@]}" ; do
 		echo "Saving $image"
-		docker save localhost:5000/$image:$IMAGE_TAG > ${WORKING_DIRECTORY}/$image
+		docker save ${REGISTRY_NAME}/$image:$IMAGE_TAG > ${WORKING_DIRECTORY}/$image
 		echo Coying image $image to master node
 		scp $SSH_ARGS $image ${CLOUD_USER}@${master_ip}:.
 		echo Load $image into registry

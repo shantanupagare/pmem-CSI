@@ -13,8 +13,9 @@ CLUSTER=${CLUSTER:-clear-govm}
 TEST_CRI=docker
 
 # Additional insecure registries (for example, my-registry:5000),
-# separated by spaces.
-TEST_INSECURE_REGISTRIES=""
+# separated by spaces, the first insecure registry will be used for the
+# deployment files.
+TEST_INSECURE_REGISTRIES=${TEST_INSECURE_REGISTRIES:-}
 
 # Additional Clear Linux bundles.
 TEST_CLEAR_LINUX_BUNDLES="storage-utils"

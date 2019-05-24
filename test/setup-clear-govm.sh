@@ -7,7 +7,7 @@ set -o pipefail
 
 HOSTNAME=${HOSTNAME:-$1}
 TEST_CRI=${TEST_CRI:-docker}
-TEST_IP_ADDR=${TEST_IP_ADDR:-127.0.0.1}
+TEST_INSECURE_REGISTRIES=${TEST_INSECURE_REGISTRIES:-127.0.0.1:5000}
 IPADDR=${IPADDR:-127.0.0.1}
 BUNDLES="cloud-native-basic containers-basic ${TEST_CLEAR_LINUX_BUNDLES}"
 
@@ -68,13 +68,13 @@ EOF"
 sudo mkdir -p /etc/containers
 sudo bash -c "cat >/etc/containers/registries.conf <<EOF
 [registries.insecure]
-registries = [ \'${TEST_IP_ADDR}:5000\'$(for i in $TEST_INSECURE_REGISTRIES; do echo -n ",\"$i\""; done) ]
+registries = [ $(echo $TEST_INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ]
 EOF"
 
 # The same for Docker.
 sudo mkdir -p /etc/docker
 sudo bash -c "cat >/etc/docker/daemon.json <<EOF
-{ \"insecure-registries\": [\"${TEST_IP_ADDR}:5000\"] }
+{ \"insecure-registries\": [ $(echo $TEST_INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF"
 
 # Proxy settings for Docker.
