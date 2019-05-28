@@ -201,7 +201,6 @@ function create_vms(){
 		done
 		echo "ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"sudo systemctl reboot\"" >> $RESTART_VMS_SCRIPT
 	done
-	PROXY_ENV="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY'"
 }
 
 
@@ -227,7 +226,7 @@ function init_kubernetes_cluster(){
 			echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 			chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 		fi
-		ENV_VARS="$PROXY_ENV 'HOSTNAME=$vm_name' 'TEST_FEATURE_GATES=$TEST_FEATURE_GATES' 'TEST_INSECURE_REGISTRIES=$TEST_INSECURE_REGISTRIES' 'CREATE_REGISTRY=$CREATE_REGISTRY' 'TEST_CLEAR_LINUX_BUNDLES=$TEST_CLEAR_LINUX_BUNDLES' 'IPADDR=$ip'"
+		ENV_VARS="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY' 'HOSTNAME=$vm_name' 'TEST_FEATURE_GATES=$TEST_FEATURE_GATES' 'TEST_INSECURE_REGISTRIES=$TEST_INSECURE_REGISTRIES' 'CREATE_REGISTRY=$CREATE_REGISTRY' 'TEST_CLEAR_LINUX_BUNDLES=$TEST_CLEAR_LINUX_BUNDLES' 'IPADDR=$ip'"
 		scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null
 		ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(sed -e "s/^/$vm_name: /" | tee -a $log_name ) &
 		echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > $ssh_script
