@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# The generic part of the Kubernetes cluster setup.
+#
+# This script runs *inside* the cluster. All setting env variables
+# used by it must be passed in explicitly via ssh.
 
 set -x
 set -o errexit

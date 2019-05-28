@@ -1,6 +1,11 @@
 #!/bin/bash
-# Implements the first-boot configuration of the different virtual machines.
-# See clear-govm.make for details.
+#
+# Implements the first-boot configuration of the different virtual machines
+# for Clear Linux running in GoVM.
+#
+# This script runs *inside* the cluster. All setting env variables
+# used by it must be passed in explicitly via ssh.
+
 set -x
 set -o errexit
 set -o pipefail

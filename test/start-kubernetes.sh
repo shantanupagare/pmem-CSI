@@ -3,7 +3,7 @@ set -o errexit
 set -o pipefail
 
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
-TEST_CONFIG=${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
+source ${TEST_CONFIG:-${TEST_DIRECTORY}/test-config.sh}
 DEPLOYMENT_SUFFIX=${DEPLOYMENT_SUFFIX:-govm}
 CLOUD_USER=${CLOUD_USER:-clear}
 CLUSTER=${CLUSTER:-${CLOUD_USER}-${DEPLOYMENT_SUFFIX}}
@@ -14,7 +14,6 @@ TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
 WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
 REGISTRY_NAME=${REGISTRY_NAME:-localhost:5000}
-source ${TEST_CONFIG}
 NODES=( $DEPLOYMENT_ID-master
 	$DEPLOYMENT_ID-worker1
 	$DEPLOYMENT_ID-worker2
@@ -203,6 +202,13 @@ function create_vms(){
 	done
 }
 
+# Prints a single line of foo=<value of foo> assignments for
+# proxy variables and all variables starting with TEST_.
+function env_vars() (
+    for var in $(set | grep -e '^[a-zA-Z_]*=' | sed -e 's/=.*//' | grep -e '^HTTP_PROXY$' -e '^HTTPS_PROXY$' -e '^NO_PROXY$' -e '^TEST_'); do
+        echo -n " $var='${!var}'"
+    done
+)
 
 function init_kubernetes_cluster(){
 	trap 'error_handler ${LINENO}' ERR
@@ -226,7 +232,7 @@ function init_kubernetes_cluster(){
 			echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 			chmod +x ${WORKING_DIRECTORY}/ssh-${CLUSTER}
 		fi
-		ENV_VARS="env 'HTTP_PROXY=$HTTP_PROXY' 'HTTPS_PROXY=$HTTPS_PROXY' 'NO_PROXY=$NO_PROXY' 'HOSTNAME=$vm_name' 'TEST_FEATURE_GATES=$TEST_FEATURE_GATES' 'TEST_INSECURE_REGISTRIES=$TEST_INSECURE_REGISTRIES' 'CREATE_REGISTRY=$CREATE_REGISTRY' 'TEST_CLEAR_LINUX_BUNDLES=$TEST_CLEAR_LINUX_BUNDLES' 'IPADDR=$ip'"
+		ENV_VARS="env$(env_vars) HOSTNAME='$vm_name' IPADDR='$ip'"
 		scp $SSH_ARGS ${TEST_DIRECTORY}/{$setup_script,$install_k8s_script} ${CLOUD_USER}@${ip}:. >/dev/null
 		ssh $SSH_ARGS ${CLOUD_USER}@${ip} "$ENV_VARS ./$setup_script && $ENV_VARS ./$install_k8s_script" &> >(sed -e "s/^/$vm_name: /" | tee -a $log_name ) &
 		echo "exec ssh $SSH_ARGS ${CLOUD_USER}@${ip} \"\$@\"" > $ssh_script
@@ -286,15 +292,11 @@ function init_workdir(){
 }
 
 function check_status(){
-	deployments=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}')
-	if [ ! -z "$deployments" ]; then
-		cat <<-EOF
-		Kubernetes cluster ${CLUSTER} is already deployed, to start a new
-		cluster first stop the current cluster by running:
-		CLUSTER=${CLUSTER} make stop
-		EOF
-		exit 1
-	fi
+    deployments=$(govm list -f '{{select (filterRegexp . "Name" "'${DEPLOYMENT_ID}'") "Name"}}')
+    if [ ! -z "$deployments" ]; then
+        echo "Kubernetes cluster ${CLUSTER} is already running, using it unchanged."
+        exit 0
+    fi
 }
 
 check_status
