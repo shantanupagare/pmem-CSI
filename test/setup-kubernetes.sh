@@ -9,10 +9,8 @@ set -x
 set -o errexit
 set -o pipefail
 
-HOSTNAME=${HOSTNAME:-$1}
-TEST_CRI=${TEST_CRI:-docker}
-INIT_REGION=${INIT_REGION:-TRUE}
-CREATE_REGISTRY=${CREATE_REGISTRY:-false}
+: ${TEST_INIT_REGION:=true}
+: ${TEST_CREATE_REGISTRY:=false}
 
 function error_handler(){
         local line="${1}"
@@ -134,12 +132,13 @@ sudo ndctl enable-region region0
 
 }
 
-if [ "$INIT_REGION" = "TRUE" ]; then
-	init_region
+if $TEST_INIT_REGION; then
+    init_region
 fi
+
 if [[ "$HOSTNAME" == *"master"* ]]; then
 	setup_kubernetes_master
-    if [ "$CREATE_REGISTRY" = "true" ]; then
+    if $TEST_CREATE_REGISTRY; then
 	    create_local_registry
     fi
 fi

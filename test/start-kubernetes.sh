@@ -13,7 +13,6 @@ REPO_DIRECTORY=${REPO_DIRECTORY:-$(dirname $TEST_DIRECTORY)}
 TEST_DIRECTORY=${TEST_DIRECTORY:-$(dirname $(readlink -f $0))}
 RESOURCES_DIRECTORY=${RESOURCES_DIRECTORY:-${REPO_DIRECTORY}/_work/resources}
 WORKING_DIRECTORY="${WORKING_DIRECTORY:-${REPO_DIRECTORY}/_work/${CLUSTER}}"
-REGISTRY_NAME=${REGISTRY_NAME:-localhost:5000}
 NODES=( $DEPLOYMENT_ID-master
 	$DEPLOYMENT_ID-worker1
 	$DEPLOYMENT_ID-worker2
@@ -33,16 +32,20 @@ EXTRA_QEMU_OPTS="${EXTRA_QWEMU_OPTS:-\
 		-device nvdimm,id=nvdimm1,memdev=mem1,label-size=${TEST_PMEM_LABEL_SIZE:-2097152} \
 		-machine pc,nvdimm}"
 CLOUD_USER=${CLOUD_USER:-clear}
-CLOUD_IMAGE="${CLOUD_IMAGE:-$(\
-		curl -s https://download.clearlinux.org/image/latest-images |\
-		awk '/cloud.img/ {print $0}')}"
+if [ "$TEST_CLEAR_LINUX_VERSION" ]; then
+    CLOUD_IMAGE="clear-$TEST_CLEAR_LINUX_VERSION-cloud.img.xz"
+else
+    : ${CLOUD_IMAGE:=$(\
+	       curl -s https://download.clearlinux.org/image/latest-images |
+		   awk '/cloud.img/ {print $0}')}
+fi
 IMAGE_URL=${IMAGE_URL:-https://download.clearlinux.org/releases/${CLOUD_IMAGE//[!0-9]/}/clear}
 SSH_TIMEOUT=60
 SSH_ARGS="-oIdentitiesOnly=yes -oStrictHostKeyChecking=no \
 	-oUserKnownHostsFile=/dev/null -oLogLevel=error \
 	-i ${SSH_KEY}"
-CREATE_REGISTRY=${CREATE_REGISTRY:-false}
-CHECK_SIGNED_FILES=${CHECK_SIGNED_FILES:-true}
+: ${TEST_CREATE_REGISTRY:=false}
+: ${TEST_CHECK_SIGNED_FILES:=true}
 
 function error_handler(){
 	local line="${1}"
@@ -60,7 +63,7 @@ function download_image(){
 			clear)
 				echo "Downloading ${CLOUD_IMAGE} image"
 				curl -O ${IMAGE_URL}/${CLOUD_IMAGE}
-				if [ "$CHECK_SIGNED_FILES" = "true" ]; then
+				if $TEST_CHECK_SIGNED_FILES; then
 					curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS
 					curl -s -O ${IMAGE_URL}/${CLOUD_IMAGE}-SHA512SUMS.sig
 					curl -s -O ${IMAGE_URL}/ClearLinuxRoot.pem
@@ -77,7 +80,7 @@ function download_image(){
 						a download error or man-in-the-middle attack.
 
 						To skip image verification run:
-						CHECK_SIGNED_FILES=false make start
+						TEST_CHECK_SIGNED_FILES=false make start
 						EOF
 						exit 2
 					fi
@@ -218,7 +221,6 @@ function init_kubernetes_cluster(){
 	setup_script="setup-${CLOUD_USER}-govm.sh"
         install_k8s_script="setup-kubernetes.sh"
 	KUBECONFIG=${WORKING_DIRECTORY}/kube.config
-	TEST_INSECURE_REGISTRIES=${TEST_INSECURE_REGISTRIES:-$master_ip:5000}
 	echo "Installing dependencies on cloud images, this process may take some minutes"
 	vm_id=0
 	for ip in ${IPS}; do
@@ -242,13 +244,13 @@ function init_kubernetes_cluster(){
 	#get kubeconfig
 	scp $SSH_ARGS ${CLOUD_USER}@${master_ip}:.kube/config $KUBECONFIG
 	export KUBECONFIG=${KUBECONFIG}
-	#Copy images to local registry in master vm if $CREATE_REGISTRY is true
-    if [ "$CREATE_REGISTRY" = "true" ]; then
+        # Copy images to local registry in master vm?
+    if $TEST_CREATE_REGISTRY; then
 	images=( pmem-csi-driver pmem-vgm pmem-ns-init)
 	for image in "${images[@]}" ; do
 		echo "Saving $image"
-		docker save ${REGISTRY_NAME}/$image:$IMAGE_TAG > ${WORKING_DIRECTORY}/$image
-		echo Coying image $image to master node
+		docker save ${TEST_PMEM_REGISTRY}/$image:$IMAGE_TAG > ${WORKING_DIRECTORY}/$image
+		echo Copying image $image to master node
 		scp $SSH_ARGS $image ${CLOUD_USER}@${master_ip}:.
 		echo Load $image into registry
 		ssh $SSH_ARGS ${CLOUD_USER}@${master_ip} "sudo docker load < $image"

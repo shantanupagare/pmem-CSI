@@ -22,6 +22,7 @@
         -   [QEMU and Kubernetes](#qemu-and-kubernetes)
         -   [Starting and stopping a test cluster](#starting-and-stopping-a-test-cluster)
         -   [Running commands on test cluster nodes over ssh](#running-commands-on-test-cluster-nodes-over-ssh)
+        -   [Configuring multiple clusters](#configuring-multiple-clusters)
         -   [Running E2E tests](#running-e2e-tests)
     -   [Communication and contribution](#communication-and-contribution)
 
@@ -469,13 +470,13 @@ These are the steps for manual set-up of certificates:
 - **Deploy the driver to Kubernetes using DeviceMode:LVM**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
+    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-lvm.yaml | kubectl create -f -
 ```
 
 - **Alternatively, deploy the driver to Kubernetes using DeviceMode:Direct**
 
 ```sh
-    $ sed -e 's/192.168.8.1:5000/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
+    $ sed -e 's/PMEM_REGISTRY/<your registry>/' deploy/kubernetes-<kubernetes version>/pmem-csi-direct.yaml | kubectl create -f -
 ```
 
 The deployment yaml file uses the registry address for the QEMU test cluster
@@ -605,11 +606,12 @@ Use the `make test` command.
 ### QEMU and Kubernetes
 
 E2E testing relies on a cluster running inside multiple QEMU virtual
-machines deployed by govm. The same cluster can also be used interactively
-when real hardware is not available.
+machines deployed by [GoVM](https://github.com/govm-project/govm). The
+same cluster can also be used interactively when real hardware is not
+available.
 
-This is known to work on a Linux development host system.
-The user must be able to run commands as root via `sudo`.
+This is known to work on a Linux development host system. The user
+must be allowed to use Docker.
 
 KVM must be enabled and the user must be allowed to use it. Usually this
 is done by adding the user to the `kvm` group. The
@@ -641,8 +643,6 @@ and use `kubectl` binary on the host running VMs.
 
 Use `make stop` to stop and remove the virtual machines.
 
-The DeviceMode (lvm or direct) used in testing is selected using variable TEST_DEVICEMODE in [test-config.sh](test/test-config.sh).
-
 ### Running commands on test cluster nodes over ssh
 
 `make start` generates ssh-wrappers `_work/clear-govm/ssh.N` for each
@@ -653,6 +653,24 @@ start interactive shell. Examples:
 k8s-test-pmem-master which is cluster master.
 
 `_work/clear-govm/ssh.1` starts a shell on k8s-test-pmem-worker-1.
+
+### Configuring multiple clusters
+
+Several aspects of the cluster setup can be configured by overriding
+the settings in the [test-config.sh](test/test-config.sh) file. See
+that file for a description of all options. Options can be set as
+environment variables of `make start` on a case-by-case basis or
+permanently by creating a file like `test/test-config.d/my-config.sh`.
+
+Multiple different clusters can be brought up in parallel by changing
+the default `clear-govm` cluster name via the `CLUSTER` env variable.
+
+For example, this invocation sets up a cluster using the non-default
+direct DeviceMode:
+
+``` sh
+TEST_DEVICEMODE=direct CLUSTER=clear-govm-direct make start
+```
 
 ### Running E2E tests
 

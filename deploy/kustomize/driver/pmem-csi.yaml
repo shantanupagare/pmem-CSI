@@ -42,7 +42,7 @@ spec:
         - name: plugin-socket-dir
           mountPath: /csi
       - name: pmem-driver
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         imagePullPolicy: Always
         args:  [ "-v=3",
                  "-drivername=pmem-csi.intel.com",
@@ -103,7 +103,7 @@ spec:
       containers:
       - name: pmem-driver
         imagePullPolicy: Always
-        image: 192.168.8.1:5000/pmem-csi-driver:canary
+        image: PMEM_REGISTRY/pmem-csi-driver:canary
         args: [ "-v=3",
                   "-drivername=pmem-csi.intel.com",
                   "-mode=node",

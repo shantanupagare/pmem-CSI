@@ -11,8 +11,6 @@ set -o errexit
 set -o pipefail
 
 HOSTNAME=${HOSTNAME:-$1}
-TEST_CRI=${TEST_CRI:-docker}
-TEST_INSECURE_REGISTRIES=${TEST_INSECURE_REGISTRIES:-127.0.0.1:5000}
 IPADDR=${IPADDR:-127.0.0.1}
 BUNDLES="cloud-native-basic containers-basic ${TEST_CLEAR_LINUX_BUNDLES}"
 
@@ -67,19 +65,19 @@ Environment=\"HTTP_PROXY=${HTTP_PROXY}\" \"HTTPS_PROXY=${HTTPS_PROXY}\" \"NO_PRO
 EOF"
 
 # Testing may involve a Docker registry running on the build host (see
-# REGISTRY_NAME). We need to trust that registry, otherwise CRI-O
-# will fail to pull images from it.
+# TEST_LOCAL_REGISTRY and TEST_PMEM_REGISTRY). We need to trust that
+# registry, otherwise CRI-O will fail to pull images from it.
 
 sudo mkdir -p /etc/containers
 sudo bash -c "cat >/etc/containers/registries.conf <<EOF
 [registries.insecure]
-registries = [ $(echo $TEST_INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ]
+registries = [ $(echo $TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY | sed 's|^|"|g;s| |", "|g;s|$|"|') ]
 EOF"
 
 # The same for Docker.
 sudo mkdir -p /etc/docker
 sudo bash -c "cat >/etc/docker/daemon.json <<EOF
-{ \"insecure-registries\": [ $(echo $TEST_INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
+{ \"insecure-registries\": [ $(echo $TEST_INSECURE_REGISTRIES $TEST_LOCAL_REGISTRY | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF"
 
 # Proxy settings for Docker.
@@ -141,9 +139,6 @@ done
 sudo systemctl daemon-reload
 sudo systemctl restart $cri_daemon
 sudo systemctl enable $cri_daemon kubelet
-
-# Run additional code specified by config.
-${TEST_CLEAR_LINUX_POST_INSTALL:-true} $ipaddr
 
 }
 
