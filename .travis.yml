@@ -10,7 +10,7 @@ services:
   - docker
 matrix:
   include:
-  - go: 1.11.1
+  - go: 1.12.1 # required by kustomize
 before_install:
   # Ubuntu Xenial doesn't have them yet and Travis CI doesn't support anything more recent. Ugly hack.
   - wget http://ftp.us.debian.org/debian/pool/main/n/ndctl/libndctl-dev_63-1.3_amd64.deb
@@ -26,4 +26,5 @@ script:
 # We don't need a Docker registry because TEST_CREATE_REGISTRY=true
 # creates one inside the QEMU virtual cluster and directly copies
 # the images into it.
-- make -k build test build-images && TEST_CREATE_REGISTRY=true make test_e2e
+- make build test build-images
+- TEST_CREATE_REGISTRY=true make test_e2e
