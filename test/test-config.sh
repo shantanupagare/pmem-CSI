@@ -86,6 +86,11 @@ fi
 # This string is used as part of deployment file name.
 : ${TEST_DEVICEMODE:=lvm}
 
+# Which deployment to used during testing.
+# Allowed values: testing (default), production
+# This string is used as part of deployment file name.
+: ${TEST_DEPLOYMENTMODE:=testing}
+
 # Initialize "region0" as required by PMEM-CSI.
 : ${TEST_INIT_REGION:=true}
 

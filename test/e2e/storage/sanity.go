@@ -18,6 +18,7 @@ package storage
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/kubernetes-csi/csi-test/pkg/sanity"
@@ -55,6 +56,11 @@ var _ = Describe("sanity", func() {
 
 		// This test expects that PMEM-CSI was deployed with
 		// socat port forwarding enabled (see deploy/kustomize/testing/README.md).
+		// This is not the case when deployed in production mode.
+		if os.Getenv("TEST_DEPLOYMENTMODE") == "production" {
+			framework.Skipf("driver deployed in production mode")
+		}
+
 		hosts, err := framework.NodeSSHHosts(cs)
 		Expect(err).NotTo(HaveOccurred(), "failed to find external/internal IPs for every node")
 		if len(hosts) <= 1 {
