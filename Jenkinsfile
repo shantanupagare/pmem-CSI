@@ -49,6 +49,9 @@ pipeline {
             steps {
                 sh 'docker version'
                 sh 'git version'
+                sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
+                sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
+                sh "git config user.email 'k8s-bot@intel.com'"
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
                     script {
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
@@ -93,11 +96,14 @@ pipeline {
 
             steps {
                 script {
-                    status = sh ( script: "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} hack/create-release.sh", returnStatus: true )
+                    status = sh ( script: "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} hack/create-new-release.sh", returnStatus: true )
                     if ( status == 2 ) {
                         // https://stackoverflow.com/questions/42667600/abort-current-build-from-pipeline-in-jenkins
                         currentBuild.result = 'ABORTED'
                         error('No new release, aborting...')
+                    }
+                    if ( status != 0 ) {
+                        error("Creating a new release failed.")
                     }
                 }
             }
@@ -221,9 +227,6 @@ pipeline {
             }
 
             steps{
-                sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
-                sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
-                sh "git config user.email 'k8s-bot@intel.com'"
                 sshagent(['9b2359bb-540b-4df3-a4b7-d304a426b2db']) {
                     sh "git push origin --follow-tags"
                 }
