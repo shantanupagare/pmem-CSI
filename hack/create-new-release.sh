@@ -37,7 +37,8 @@ oldrev=$(git rev-parse HEAD)
 hack/update-clear-linux-base.sh || die "Failed to update base image."
 newrev=$(git rev-parse HEAD)
 if [ "$oldrev" = "$newrev" ]; then
-    exit 0
+    # Special return code for "nothing changed.
+    exit 2
 fi
 
 # Bump version.
