@@ -228,7 +228,9 @@ pipeline {
 
             steps{
                 sshagent(['9b2359bb-540b-4df3-a4b7-d304a426b2db']) {
-                    sh "git push origin --follow-tags"
+                    // We build a branch, but have it checked out by commit (detached head).
+                    // Therefore we have to specify the branch name explicitly when pushing.
+                    sh "git push origin --follow-tags HEAD:${env.BUILD_TARGET}"
                 }
             }
         }

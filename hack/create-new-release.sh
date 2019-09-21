@@ -7,10 +7,7 @@
 # This script is meant to be called by the CI to refresh the container
 # images on a release branch. Preconditions:
 # - Docker is usable (needed by update-clear-linux-base.sh)
-# - the current user can commit and push to GitHub
-
-# Repository that we push to.
-: ${REPO:=origin}
+# - the current user can commit to GitHub
 
 die () {
     echo "ERROR: $@"
@@ -52,6 +49,3 @@ $version
 Update to Clear Linux $clearversion.
 EOF
 git tag --annotate -m "update to Clear Linux $clearversion" "$version"
-
-# And now push current branch.
-git push ${REPO} "$branch" "$version"
