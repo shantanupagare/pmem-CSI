@@ -52,6 +52,10 @@ pipeline {
                 sh "git remote set-url origin git@github.com:intel/pmem-csi.git"
                 sh "git config user.name 'Intel Kubernetes CI/CD Bot'"
                 sh "git config user.email 'k8s-bot@intel.com'"
+                sh "ssh-keygen -R github.com || true" // TODO: is this necessary?
+                sshagent(['9b2359bb-540b-4df3-a4b7-d304a426b2db']) {
+                  sh "ssh git@github.com"
+                }
                 withDockerRegistry([ credentialsId: "e16bd38a-76cb-4900-a5cb-7f6aa3aeb22d", url: "https://${REGISTRY_NAME}" ]) {
                     script {
                         // Despite its name, GIT_LOCAL_BRANCH contains the tag name when building a tag.
