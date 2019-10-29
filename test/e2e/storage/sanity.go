@@ -31,8 +31,8 @@ import (
 	"time"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
-	"github.com/kubernetes-csi/csi-test/pkg/sanity"
-	sanityutils "github.com/kubernetes-csi/csi-test/utils"
+	"github.com/kubernetes-csi/csi-test/v3/pkg/sanity"
+	sanityutils "github.com/kubernetes-csi/csi-test/v3/utils"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -43,9 +43,9 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	clientexec "k8s.io/client-go/util/exec"
 	"k8s.io/kubernetes/test/e2e/framework"
-	testutils "k8s.io/kubernetes/test/utils"
 	e2epod "k8s.io/kubernetes/test/e2e/framework/pod"
 	e2essh "k8s.io/kubernetes/test/e2e/framework/ssh"
+	testutils "k8s.io/kubernetes/test/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -67,7 +67,7 @@ var _ = Describe("sanity", func() {
 		// and deletes all extra entries that it does not know about.
 		TargetPath:  "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-target.XXXXXX",
 		StagingPath: "/var/lib/kubelet/plugins/kubernetes.io/csi/pv/pmem-sanity-staging.XXXXXX",
-		IDGen: &sanity.DefaultIDGenerator{},
+		IDGen:       &sanity.DefaultIDGenerator{},
 	}
 
 	f := framework.NewDefaultFramework("pmem")
