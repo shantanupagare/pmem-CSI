@@ -252,15 +252,15 @@
   version = "v0.6.1"
 
 [[projects]]
-  branch = "fix-semver"
-  digest = "1:327fe26f8ea607baab0abf487b33ad9a7b3c91d08480f908f3738ea4636d3d89"
+  branch = "config-defaults"
+  digest = "1:0128912c331d672c43c98b33e9d9e358efe01e2cd040b67f693e67aac5890d2a"
   name = "github.com/kubernetes-csi/csi-test"
   packages = [
     "v3/pkg/sanity",
     "v3/utils",
   ]
   pruneopts = "T"
-  revision = "2bc889d3e5e8a5eed24aec80be9359fe4e36919c"
+  revision = "9595f5f6b09714a7f5003a08a2812b29aec675ee"
   source = "github.com/pohly/csi-test"
 
 [[projects]]

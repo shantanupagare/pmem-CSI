@@ -47,7 +47,7 @@
 [[constraint]]
   name = "github.com/kubernetes-csi/csi-test"
   source = "github.com/pohly/csi-test"
-  branch = "fix-semver"
+  branch = "config-defaults"
 
 # We have to select the right version by name because of the "kubernetes-" prefix, dep doesn't
 # recognize these as normal releases. Upstream is considering to change the tagging,

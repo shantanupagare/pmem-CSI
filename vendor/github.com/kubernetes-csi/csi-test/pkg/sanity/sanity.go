@@ -51,9 +51,13 @@ type CSISecrets struct {
 	ControllerExpandVolumeSecret               map[string]string `yaml:"ControllerExpandVolumeSecret"`
 }
 
-// Config provides the configuration for the sanity tests. It
-// needs to be initialized by the user of the sanity package.
-type Config struct {
+// TestConfig provides the configuration for the sanity tests. It must be
+// constructed with NewTestConfig to initialize it with sane defaults. The
+// user of the sanity package can then override values before passing
+// the instance to [Ginkgo]Test and/or (when using GinkgoTest) in a
+// BeforeEach. For example, the BeforeEach could set up the CSI driver
+// and then set the Address field differently for each test.
+type TestConfig struct {
 	// TargetPath is the *parent* directory for NodePublishVolumeRequest.target_path.
 	// It gets created and removed by csi-sanity.
 	TargetPath string
@@ -62,9 +66,19 @@ type Config struct {
 	// It gets created and removed by csi-sanity.
 	StagingPath string
 
-	Address           string
+	// Address is the gRPC endpoint (e.g. unix:/tmp/csi.sock or
+	// dns:///my-machine:9000) of the CSI driver. If ControllerAddress
+	// is empty, it must provide both the controller and node service.
+	Address string
+
+	// ControllerAddress optionally provides the gRPC endpoint of
+	// the controller service.
 	ControllerAddress string
-	SecretsFile       string
+
+	// SecretsFile is the filename of a .yaml file which is used
+	// to populate CSISecrets which are then used for calls to the
+	// CSI driver.
+	SecretsFile string
 
 	TestVolumeSize int64
 
@@ -74,6 +88,9 @@ type Config struct {
 	TestVolumeParameters      map[string]string
 	TestNodeVolumeAttachLimit bool
 
+	// JUnitFile is used by Test to store test results in JUnit
+	// format. When using GinkgoTest, the caller is responsible
+	// for configuring the Ginkgo runner.
 	JUnitFile string
 
 	// Callback functions to customize the creation of target and staging
@@ -122,17 +139,16 @@ type Config struct {
 	// Timeout for the executed commands for path removal.
 	RemovePathCmdTimeout int
 
-	// IDGen is an optional interface for callers to provide a
-	// generator for valid Volume and Node IDs. If unset,
-	// it will be set to a DefaultIDGenerator instance when
-	// passing the config to Test or GinkgoTest.
+	// IDGen is an interface for callers to provide a
+	// generator for valid Volume and Node IDs. Defaults to
+	// DefaultIDGenerator.
 	IDGen IDGenerator
 }
 
-// SanityContext holds the variables that each test can depend on. It
-// gets initialized before each test block runs.
-type SanityContext struct {
-	Config         *Config
+// TestContext gets initialized by the sanity package before each test
+// runs. It holds the variables that each test can depend on.
+type TestContext struct {
+	Config         *TestConfig
 	Conn           *grpc.ClientConn
 	ControllerConn *grpc.ClientConn
 	Secrets        *CSISecrets
@@ -145,61 +161,72 @@ type SanityContext struct {
 	StagingPath string
 }
 
+// NewTestConfig returns a config instance with all values set to
+// their defaults.
+func NewTestConfig() TestConfig {
+	return TestConfig{
+		TargetPath:           os.TempDir() + "/csi-mount",
+		StagingPath:          os.TempDir() + "/csi-staging",
+		CreatePathCmdTimeout: 10,
+		RemovePathCmdTimeout: 10,
+		TestVolumeSize:       10 * 1024 * 1024 * 1024, // 10 GB
+		IDGen:                &DefaultIDGenerator{},
+	}
+}
+
 // newContext sets up sanity testing with a config supplied by the
 // user of the sanity package. Ownership of that config is shared
 // between the sanity package and the caller.
-func newContext(reqConfig *Config) *SanityContext {
-	// To avoid runtime if checks when using IDGen, a default
-	// is set here.
-	if reqConfig.IDGen == nil {
-		reqConfig.IDGen = &DefaultIDGenerator{}
-	}
-
-	return &SanityContext{
-		Config: reqConfig,
+func newTestContext(config *TestConfig) *TestContext {
+	return &TestContext{
+		Config: config,
 	}
 }
 
 // Test will test the CSI driver at the specified address by
 // setting up a Ginkgo suite and running it.
-func Test(t *testing.T, reqConfig *Config) {
-	path := reqConfig.TestVolumeParametersFile
+func Test(t *testing.T, config TestConfig) {
+	sc := GinkgoTest(&config)
+	RegisterFailHandler(Fail)
+
+	var specReporters []Reporter
+	if config.JUnitFile != "" {
+		junitReporter := reporters.NewJUnitReporter(config.JUnitFile)
+		specReporters = append(specReporters, junitReporter)
+	}
+	RunSpecsWithDefaultAndCustomReporters(t, "CSI Driver Test Suite", specReporters)
+	sc.Finalize()
+}
+
+// GinkoTest is another entry point for sanity testing: instead of
+// directly running tests like Test does, it merely registers the
+// tests. This can be used to embed sanity testing in a custom Ginkgo
+// test suite.  The pointer to the configuration is merely stored by
+// GinkgoTest for use when the tests run. Therefore its content can
+// still be modified in a BeforeEach. The sanity package itself treats
+// it as read-only.
+func GinkgoTest(config *TestConfig) *TestContext {
+	sc := newTestContext(config)
+	registerTestsInGinkgo(sc)
+	return sc
+}
+
+// Setup must be invoked before each test. It initialize per-test
+// variables in the context.
+func (sc *TestContext) Setup() {
+	var err error
+
+	path := sc.Config.TestVolumeParametersFile
 	if len(path) != 0 {
 		yamlFile, err := ioutil.ReadFile(path)
 		if err != nil {
 			panic(fmt.Sprintf("failed to read file %q: %v", path, err))
 		}
-		err = yaml.Unmarshal(yamlFile, &reqConfig.TestVolumeParameters)
+		err = yaml.Unmarshal(yamlFile, &sc.Config.TestVolumeParameters)
 		if err != nil {
 			panic(fmt.Sprintf("error unmarshaling yaml: %v", err))
 		}
 	}
-
-	sc := newContext(reqConfig)
-	registerTestsInGinkgo(sc)
-	RegisterFailHandler(Fail)
-
-	var specReporters []Reporter
-	if reqConfig.JUnitFile != "" {
-		junitReporter := reporters.NewJUnitReporter(reqConfig.JUnitFile)
-		specReporters = append(specReporters, junitReporter)
-	}
-	RunSpecsWithDefaultAndCustomReporters(t, "CSI Driver Test Suite", specReporters)
-	if sc.Conn != nil {
-		sc.Conn.Close()
-	}
-}
-
-// GinkoTest is another entry point for sanity testing: instead of directly
-// running tests like Test does, it merely registers the tests. This can
-// be used to embed sanity testing in a custom Ginkgo test suite.
-func GinkgoTest(reqConfig *Config) {
-	sc := newContext(reqConfig)
-	registerTestsInGinkgo(sc)
-}
-
-func (sc *SanityContext) Setup() {
-	var err error
 
 	if len(sc.Config.SecretsFile) > 0 {
 		sc.Secrets, err = loadSecrets(sc.Config.SecretsFile)
@@ -250,7 +277,9 @@ func (sc *SanityContext) Setup() {
 	sc.StagingPath = stagingPath
 }
 
-func (sc *SanityContext) Teardown() {
+// Teardown must be called after each test. It frees resources
+// allocated by Setup.
+func (sc *TestContext) Teardown() {
 	// Delete the created paths if any.
 	removeMountTargetLocation(sc.TargetPath, sc.Config.RemoveTargetPathCmd, sc.Config.RemoveTargetPath, sc.Config.RemovePathCmdTimeout)
 	removeMountTargetLocation(sc.StagingPath, sc.Config.RemoveStagingPathCmd, sc.Config.RemoveStagingPath, sc.Config.RemovePathCmdTimeout)
@@ -265,6 +294,17 @@ func (sc *SanityContext) Teardown() {
 	// once per process instead of once per test case. This was
 	// also said to be faster
 	// (https://github.com/kubernetes-csi/csi-test/pull/98).
+}
+
+// Finalize frees any resources that might be still cached in the context.
+// It should be called after running all tests.
+func (sc *TestContext) Finalize() {
+	if sc.Conn != nil {
+		sc.Conn.Close()
+	}
+	if sc.ControllerConn != nil {
+		sc.ControllerConn.Close()
+	}
 }
 
 // createMountTargetLocation takes a target path parameter and creates the
