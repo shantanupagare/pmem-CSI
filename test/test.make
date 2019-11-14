@@ -22,14 +22,19 @@ fmt:
 
 # This ensures that the vendor directory and vendor-bom.csv are in sync
 # at least as far as the listed components go.
+#
+# "go list -m all" returns all modules we depend on, even if we don't
+# actually use any package from it. "go mod vendor" only vendors
+# the packages we really need and we can limit the
+# check to content that we really have in vendor.
 .PHONY: test_vendor_bom
 test: test_vendor_bom
 test_vendor_bom:
 	@ if ! diff -c \
 		<(tail -n +2 vendor-bom.csv | sed -e 's/;.*//') \
-		<((grep '^  name =' Gopkg.lock  | sed -e 's/.*"\(.*\)"/\1/') | LC_ALL=C LANG=C sort); then \
+		<(for path in $$(go list -f '{{.Path}}' -m all); do if [ -d "vendor/$$path" ]; then echo "$$path"; fi; done | LC_ALL=C LANG=C sort); then \
 		echo; \
-		echo "vendor-bom.csv not in sync with vendor directory (aka Gopk.lock):"; \
+		echo "vendor-bom.csv not in sync with vendor directory:"; \
 		echo "+ new entry, missing in vendor-bom.csv"; \
 		echo "- obsolete entry in vendor-bom.csv"; \
 		false; \
