@@ -48,8 +48,6 @@ pipeline {
         /* last version before the 1.14 update in 28630 */
         CLEAR_LINUX_VERSION_1_13 = "28620"
 
-        // path for placing the source to build outside of GOROOT
-        PMEM_PATH = "/src/pmem-csi"
         REGISTRY_NAME = "cloud-native-image-registry.westus.cloudapp.azure.com"
 
         // Per-branch build environment, marked as "do not promote to public registry".
@@ -342,7 +340,13 @@ git push origin HEAD:master
  "docker run" parameters which:
  - make the Docker instance on the host available inside a container (socket and command)
  - set common Makefile values (cachebust, cache populated from images if available)
- - source in $GOPATH as current directory
+ - source in current directory
+ - GOPATH alongside it
+ - HOME above it
+ - same user inside and outside the container
+ - same uid/gid/groups as on the host, plus root=0 for sudo
+
+ "rshared" is needed for mount propagation when govm runs outside the build container.
 
  A function is used because a variable, even one which uses a closure with lazy evaluation,
  didn't actually result in a string with all variables replaced by the current values.
@@ -354,11 +358,16 @@ String DockerBuildArgs() {
     -e BUILD_IMAGE_ID=${env.CACHEBUST} \
     -e 'BUILD_ARGS=--cache-from ${env.BUILD_IMAGE} --cache-from ${env.PMEM_CSI_IMAGE}' \
     -e REGISTRY_NAME=${env.REGISTRY_NAME} \
-    -e USER=root \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    -v /usr/bin/docker:/usr/bin/docker \
-    -v `pwd`:${env.PMEM_PATH} \
-    -w ${env.PMEM_PATH} \
+    -e HOME=`pwd`/.. \
+    -e GOPATH=`pwd`/../gopath \
+    -e USER=`id -nu` \
+    --user `id -u`:`id -g` \
+    --group-add `id -G | sed -e 's/ / --group-add /g'` \
+    --group-add 0 \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume /usr/bin/docker:/usr/bin/docker \
+    --volume `pwd`/..:`pwd`/..:rshared \
+    --workdir `pwd` \
     "
 }
 
@@ -399,18 +408,18 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
                   -e TEST_ETCD_VOLUME_SIZE=1073741824 \
                   ${DockerBuildArgs()} \
-                  --volume `pwd`:`pwd`:rshared \
-                  -w `pwd` \
                   ${env.BUILD_IMAGE} \
                   bash -c 'set -x; \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
-                           swupd bundle-add openssh-server && \
-                           make start && cd ${env.PMEM_PATH} && \
+                           echo jenkins:x:\$(id -u):\$(id -g):Jenkins:\$(pwd)/..:/bin/bash >>/etc/passwd && \
+                           echo jenkins:*:0:0:99999:0::: >>/etc/shadow && \
+                           echo jenkins:x:\$(id -g): >>/etc/group && \
+                           make start && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
                                _work/clear/ssh.0 kubectl logs -f -n kube-system \$pod-pmem-csi-clear-master | sed -e \"s/^/\$pod: /\" & \
                            done && \
-                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | tar -C /usr/local/bin --strip-components=2 -xf - && \
+                           _work/clear/ssh.0 tar -C / -cf - usr/bin/kubectl | sudo tar -C /usr/local/bin --strip-components=2 -xf - && \
                            for ssh in \$(ls _work/clear/ssh.[0-9]); do \
                                hostname=\$(\$ssh hostname) && \
                                ( set +x; \
@@ -438,6 +447,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
 
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
-        sh "docker run --rm --privileged=true -e CLUSTER=clear ${DockerBuildArgs()} -v `pwd`:`pwd`:rshared ${env.BUILD_IMAGE} make stop"
+        sh "docker run --rm -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
     }
 }

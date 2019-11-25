@@ -23,7 +23,25 @@ ARG GO_VERSION="1.13.4"
 #pull dependencies required for downloading and building libndctl
 ARG CACHEBUST
 RUN echo "Updating build image from ${CLEAR_LINUX_BASE} to ${SWUPD_UPDATE_ARG:-the latest release}."
-RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic && rm -rf /var/lib/swupd /var/tmp/swupd
+# openssh-client is for ssh, which is needed for CI testing.
+RUN swupd update ${SWUPD_UPDATE_ARG} && swupd bundle-add ${NDCTL_BUILD_DEPS} c-basic openssh-client sudo && rm -rf /var/lib/swupd /var/tmp/swupd
+
+# Allow non-root users of the build container to add themselves to /etc/passwd and /etc/group.
+# This is needed for ssh-keygen inside the CI test jobs and sudo (see Jenkinsfile).
+RUN mkdir -p /etc && \
+    echo 'root:x:0:' >>/etc/group && \
+    echo 'root:x:0:0:root:/root:/bin/bash' >>/etc/passwd  && \
+    echo 'root:x:0:0:99999:0:::' >>/etc/shadow && \
+    chmod a+rw /etc/passwd /etc/group /etc/shadow
+
+# Also allow non-root users to become root via sudo when they add themselves
+# to the root group (= 0) with --add-group 0. Anyone who is
+# authorized to run a privileged container is already root on the the
+# host, so this isn't a security problem. Besides, this container is
+# only used during development.
+RUN mkdir /etc/sudoers.d
+RUN echo '%root ALL=(ALL) NOPASSWD: ALL' >/etc/sudoers.d/nopasswd
+
 # Workaround for "pkg-config: error while loading shared libraries" when using older Docker
 # (see https://github.com/clearlinux/distribution/issues/831)
 RUN ldconfig
