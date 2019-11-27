@@ -54,6 +54,13 @@ pipeline {
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_IMAGE = ""
 
+        // A container which gets started once and the keeps running for use
+        // with 'docker exec'. The container runs the build environment defined
+        // in the Dockerfile and thus can be different for different branches
+        // of PMEM-CSI, whereas the host OS is defined by the Jenkins configuration
+        // independently from which branches are getting built.
+        BUILD_CONTAINER = "pmem-csi-build-container"
+
         // Tag or branch name that is getting built, depending on the job.
         // Set below via a script, must *not* be set here as it can't be overwritten.
         // BUILD_TARGET = ""
@@ -123,6 +130,24 @@ pipeline {
                     }
                     sh "env; echo Building BUILD_IMAGE=${env.BUILD_IMAGE} for BUILD_TARGET=${env.BUILD_TARGET}, CHANGE_ID=${env.CHANGE_ID}, CACHEBUST=${env.CACHEBUST}."
                     sh "docker build --cache-from ${env.BUILD_IMAGE} --label cachebust=${env.CACHEBUST} --target build --build-arg CACHEBUST=${env.CACHEBUST} -t ${env.BUILD_IMAGE} ."
+                    // Create a running container (https://stackoverflow.com/a/38308399).
+                    sh "docker create ${DockerVolumeArgs()} --name=${env.BUILD_CONTAINER} -it ${env.BUILD_IMAGE}"
+                    sh "docker start ${env.BUILD_CONTAINER}"
+
+                    // Allow non-root users to become root via sudo when they are part of the root group.
+                    // ${DockerBuildArgs()} includes the necessary parameters for that.
+                    sh "docker exec ${env.BUILD_CONTAINER} mkdir /etc/sudoers.d"
+                    sh "echo '%root ALL=(ALL) NOPASSWD: ALL' | docker exec -i ${env.BUILD_CONTAINER} tee /etc/sudoers.d/nopasswd >/dev/null"
+
+                    // sudo needs a user entry for the jenkins user.
+                    sh "echo jenkins:x:`id -u`:0:Jenkins:`pwd`/..:/bin/bash | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/passwd >/dev/null"
+                    sh "echo 'jenkins:*:0:0:99999:0:::' | docker exec -i ${env.BUILD_CONTAINER} tee --append /etc/shadow >/dev/null"
+
+                    // Anyone inside the container can use Docker. Also checks that sudo works now.
+                    sh "docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} sudo chmod a+rw /var/run/docker.sock"
+
+                    // Verify that Docker can be used.
+                    sh "docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} docker ps"
                 }
             }
         }
@@ -134,7 +159,7 @@ pipeline {
 
             steps {
                 script {
-                    status = sh ( script: "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} hack/create-new-release.sh", returnStatus: true )
+                    status = sh ( script: "docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} hack/create-new-release.sh", returnStatus: true )
                     if ( status == 2 ) {
                         // https://stackoverflow.com/questions/42667600/abort-current-build-from-pipeline-in-jenkins
                         currentBuild.result = 'ABORTED'
@@ -153,7 +178,7 @@ pipeline {
             }
 
             steps {
-                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make test"
+                sh "docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} make test"
             }
         }
 
@@ -164,7 +189,7 @@ pipeline {
             }
 
             steps {
-                sh "docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make build-images"
+                sh "docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} make build-images"
             }
         }
 
@@ -315,10 +340,12 @@ git push origin HEAD:master
                     // When building a tag, we expect the code to contain that version as image version.
                     // When building a branch, we expect "canary" for the "devel" branch and (currently) don't publish
                     // canary images for other branches.
-                    sh "imageversion=\$(docker run --rm ${DockerBuildArgs()} ${env.BUILD_IMAGE} make print-image-version) && \
+                    sh "imageversion=\$(docker exec ${DockerBuildArgs()} ${env.BUILD_CONTAINER} make print-image-version) && \
                         expectedversion=\$(echo '${env.BUILD_TARGET}' | sed -e 's/devel/canary/') && \
                         if [ \"\$imageversion\" = \"\$expectedversion\" ] ; then \
-                            docker run --rm ${DockerBuildArgs()} -e DOCKER_CONFIG=$DOCKER_CONFIG -v $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} make push-images PUSH_IMAGE_DEP=; \
+                            docker run --rm ${DockerBuildArgs()} ${DockerVolumeArgs()} \
+                                       -e DOCKER_CONFIG=$DOCKER_CONFIG --volume $DOCKER_CONFIG:$DOCKER_CONFIG ${env.BUILD_IMAGE} \
+                                       make push-images PUSH_IMAGE_DEP=; \
                         else \
                             echo \"Skipping the pushing of PMEM-CSI driver images with version \$imageversion because this build is for ${env.BUILD_TARGET}.\"; \
                         fi"
@@ -337,16 +364,14 @@ git push origin HEAD:master
 }
 
 /*
- "docker run" parameters which:
+ "docker run" or "docker exec" parameters which:
  - make the Docker instance on the host available inside a container (socket and command)
  - set common Makefile values (cachebust, cache populated from images if available)
  - source in current directory
  - GOPATH alongside it
  - HOME above it
  - same user inside and outside the container
- - same uid/gid/groups as on the host, plus root=0 for sudo
-
- "rshared" is needed for mount propagation when govm runs outside the build container.
+ - same uid as on the host and gid=0=root for sudo
 
  A function is used because a variable, even one which uses a closure with lazy evaluation,
  didn't actually result in a string with all variables replaced by the current values.
@@ -361,13 +386,19 @@ String DockerBuildArgs() {
     -e HOME=`pwd`/.. \
     -e GOPATH=`pwd`/../gopath \
     -e USER=`id -nu` \
-    --user `id -u`:`id -g` \
-    --group-add `id -G | sed -e 's/ / --group-add /g'` \
-    --group-add 0 \
+    --user `id -u`:0 \
+    --workdir `pwd` \
+    "
+}
+
+/*
+  Common volume parameters for "docker run" or "docker exec".
+*/
+String DockerVolumeArgs() {
+    "\
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume /usr/bin/docker:/usr/bin/docker \
     --volume `pwd`/..:`pwd`/..:rshared \
-    --workdir `pwd` \
     "
 }
 
@@ -394,7 +425,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
            mkdir -p build/reports && \
            if ${env.LOGGING_JOURNALCTL}; then sudo journalctl -f; fi & \
            ( set +x; while true; do sleep ${env.LOGGING_SAMPLING_DELAY}; top -b -n 1 -w 120 | head -n 20; df -h; done ) & \
-           docker run --rm \
+           docker exec \
                   --privileged=true \
                   -e CLUSTER=clear \
                   -e GOVM_YAML=`pwd`/_work/clear/deployment.yaml \
@@ -408,12 +439,9 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
                   -e TEST_ETCD_VOLUME_SIZE=1073741824 \
                   ${DockerBuildArgs()} \
-                  ${env.BUILD_IMAGE} \
+                  ${env.BUILD_CONTAINER} \
                   bash -c 'set -x; \
                            testrun=\$(echo '${distro}-${distroVersion}-${kubernetesVersion}-${deviceMode}-${deploymentMode}' | sed -e s/--*/-/g | tr . _ ) && \
-                           echo jenkins:x:\$(id -u):\$(id -g):Jenkins:\$(pwd)/..:/bin/bash >>/etc/passwd && \
-                           echo jenkins:*:0:0:99999:0::: >>/etc/shadow && \
-                           echo jenkins:x:\$(id -g): >>/etc/group && \
                            make start && \
                            _work/clear/ssh.0 kubectl get pods --all-namespaces -o wide && \
                            for pod in ${env.LOGGING_PODS}; do \
@@ -447,6 +475,6 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
 
         // Always shut down the cluster to free up resources. As in "make start", we have to expose
         // the path as used on the host also inside the containner, but we don't need to be in it.
-        sh "docker run --rm -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_IMAGE} make stop"
+        sh "docker exec -e CLUSTER=clear ${DockerBuildArgs()} ${env.BUILD_CONTAINER} make stop"
     }
 }
