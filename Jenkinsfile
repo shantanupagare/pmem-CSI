@@ -36,6 +36,8 @@ pipeline {
           the control plane is unsupported.
         */
 
+        CLEAR_LINUX_VERSION_1_16 = "31700" // picked because it is the version in the current clearlinux image (i.e. "swupd update" is a nop)
+
         CLEAR_LINUX_VERSION_1_15 = "31070"
         /* 29890 broke networking
         (https://github.com/clearlinux/distribution/issues/904). In
@@ -176,7 +178,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "fedora", "", "1.16")
+                TestInVM("lvm", "testing", "fedora", "", "1.16", "")
             }
         }
 
@@ -186,7 +188,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "fedora", "", "1.16")
+                TestInVM("direct", "testing", "fedora", "", "1.16", "")
             }
         }
 
@@ -197,7 +199,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "testing", "fedora", "", "1.14")
+                TestInVM("lvm", "testing", "fedora", "", "1.14", "")
             }
         }
 
@@ -208,7 +210,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "testing", "fedora", "", "1.14")
+                TestInVM("direct", "testing", "fedora", "", "1.14", "")
             }
         }
 
@@ -217,13 +219,15 @@ pipeline {
           Therefore it is faster.
         */
 
-        stage('production 1.15, Clear Linux') {
+        stage('production 1.16, Clear Linux') {
             options {
                 timeout(time: 90, unit: "MINUTES")
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_15}", "")
+                // cri-o is the default in cloud-native-setup and better tested in Clear.
+                // Docker on top of container was indeed not stable in our CI.
+                TestInVM("lvm", "production", "clear", "${env.CLEAR_LINUX_VERSION_1_16}", "-e TEST_CRI=crio")
             }
         }
 
@@ -234,7 +238,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "fedora", "", "1.15")
+                TestInVM("lvm", "production", "fedora", "", "1.15", "")
             }
         }
 
@@ -245,7 +249,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "production", "fedora", "", "1.15")
+                TestInVM("direct", "production", "fedora", "", "1.15", "")
             }
         }
 
@@ -256,7 +260,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("lvm", "production", "fedora", "", "1.14")
+                TestInVM("lvm", "production", "fedora", "", "1.14", "")
             }
         }
 
@@ -267,7 +271,7 @@ pipeline {
                 retry(2)
             }
             steps {
-                TestInVM("direct", "production", "fedora", "", "1.14")
+                TestInVM("direct", "production", "fedora", "", "1.14", "")
             }
         }
 
@@ -362,7 +366,7 @@ String DockerBuildArgs() {
     "
 }
 
-void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersion) {
+void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersion, env) {
     try {
         /*
         We have to run "make start" in the current directory
@@ -398,6 +402,7 @@ void TestInVM(deviceMode, deploymentMode, distro, distroVersion, kubernetesVersi
                   -e TEST_DISTRO_VERSION=${distroVersion} \
                   -e TEST_KUBERNETES_VERSION=${kubernetesVersion} \
                   -e TEST_ETCD_VOLUME_SIZE=1073741824 \
+                  ${env} \
                   ${DockerBuildArgs()} \
                   --volume `pwd`:`pwd`:rshared \
                   -w `pwd` \
