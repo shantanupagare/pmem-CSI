@@ -28,8 +28,9 @@ packages+=" ndctl"
 packages+=" device-mapper-persistent-data lvm2"
 
 if ${INIT_KUBERNETES}; then
-    # Always use Docker, and always use the same version for reproducibility.
-    cat <<'EOF' > /etc/yum.repos.d/docker-ce.repo
+    case $TEST_CRI in
+        docker|containerd)
+            cat <<'EOF' > /etc/yum.repos.d/docker-ce.repo
 [docker-ce-stable]
 name=Docker CE Stable - $basearch
 baseurl=https://download.docker.com/linux/centos/7/$basearch/stable
@@ -37,11 +38,59 @@ enabled=1
 gpgcheck=1
 gpgkey=https://download.docker.com/linux/centos/gpg
 EOF
-    packages+=" docker-ce-3:19.03.2-3.el7"
+            if [ $TEST_CRI = docker ]; then
+                packages+=" docker-ce-3:19.03.2-3.el7"
+                cri_daemon=docker
+            else
+                packages+=" containerd.io-0:1.2.10-3.2.el7"
+                cri_daemon=containerd
+            fi
+            ;;
+        crio)
+            # https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
+            #
+            # In theory, the version of CRI-O should match the
+            # corresponding Kubernetes release.  In practice, CentOS
+            # currently only provides 1.15 (see
+            # https://github.com/cri-o/cri-o/issues/1141 for reason
+            # why we rely on CentOS) as the latest version and that
+            # happens to work with all Kubernetes versions that we
+            # currently test with.
+            cat <<'EOF' >/etc/yum.repos.d/crio.repo
+[crio]
+name=CRI-O release repo
+baseurl=https://cbs.centos.org/repos/paas7-crio-115-release/x86_64/os/
+enabled=1
+gpgcheck=0
+EOF
+            packages+=" cri-o"
+            cri_daemon=cri-o
+            ;;
+        *)
+            echo "ERROR: unsupported TEST_CRI=$TEST_CRI"
+	    exit 1
+            ;;
+    esac
+
+    # Common to CRI-O and containerd, probably okay for Docker (https://kubernetes.io/docs/setup/production-environment/container-runtimes/)
+    mkdir -p /etc/modules-load.d/
+    cat > /etc/modules-load.d/kubernetes.conf <<EOF
+overlay
+br_netfilter
+EOF
+
+    modprobe overlay
+    modprobe br_netfilter
+
+    # Setup required sysctl params, these persist across reboots.
+    cat > /etc/sysctl.d/99-kubernetes-cri.conf <<EOF
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+EOF
+    sysctl --system
 
     # Install according to https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-    modprobe br_netfilter
-    echo 1 >/proc/sys/net/bridge/bridge-nf-call-iptables
     setenforce 0
     sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
 
@@ -100,22 +149,80 @@ if $INIT_KUBERNETES; then
     cat >/etc/docker/daemon.json <<EOF
 { "insecure-registries": [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ] }
 EOF
+    mkdir -p /etc/containers
+    cat >/etc/containers/registries.conf <<EOF
+[registries.insecure]
+registries = [ $(echo $INSECURE_REGISTRIES | sed 's|^|"|g;s| |", "|g;s|$|"|') ]
 
-    # Proxy settings for Docker.
-    mkdir -p /etc/systemd/system/docker.service.d/
-    cat >/etc/systemd/system/docker.service.d/proxy.conf <<EOF
-[Service]
-Environment="HTTP_PROXY=$HTTP_PROXY" "HTTPS_PROXY=$HTTPS_PROXY" "NO_PROXY=$NO_PROXY"
+# We need to configure docker.io as default registry (https://github.com/kubernetes/minikube/issues/2835).
+[registries.search]
+registries = ['docker.io']
 EOF
+    mkdir -p /etc/containerd
+    cat >/etc/containerd/config.toml <<EOF
+[plugins.cri.registry.mirrors]
+EOF
+    for registry in $INSECURE_REGISTRIES; do
+        cat >>/etc/containerd/config.toml <<EOF
+  [plugins.cri.registry.mirrors."$registry"]
+    endpoint = ["http://$registry"]
+EOF
+    done
+
+    # Proxy settings for the different container runtimes are injected into
+    # their environment.
+    for cri in crio docker containerd; do
+        mkdir -p /etc/systemd/system/$cri.service.d
+        cat >/etc/systemd/system/$cri.service.d/proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=${HTTP_PROXY}" "HTTPS_PROXY=${HTTPS_PROXY}" "NO_PROXY=${NO_PROXY}"
+EOF
+    done
 
     # kubelet must start after the container runtime that it depends on.
-    mkdir -p /etc/systemd/system/kubelet.service.d
+    mkdir -p /etc/systemd/system/kubelet.service.d/
     cat >/etc/systemd/system/kubelet.service.d/10-cri.conf <<EOF
 [Unit]
-After=docker.service
+After=$cri_daemon.service
 EOF
+
+    # Workaround for crio 1.15.1 (https://github.com/kubernetes/minikube/issues/5323).
+    if [ $TEST_CRI = "crio" ] && rpm -q cri-o | grep -q -e -1.15.1-; then
+        mkdir -p /etc/systemd/system/kubelet.service.d/
+        cat >/etc/systemd/system/kubelet.service.d/10-crio-1151.conf <<EOF
+[Unit]
+Environment="GRPC_GO_REQUIRE_HANDSHAKE=off"
+EOF
+    fi
+
+    # Configure Docker as suggested in https://kubernetes.io/docs/setup/production-environment/container-runtimes/#docker,
+    # see also https://github.com/kubernetes/kubeadm/issues/1394.
+    cat >>/etc/docker/daemon.json <<EOF
+{
+  "exec-opts": ["native.cgroupdriver=systemd"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+    # And also containerd.
+    mkdir -p /etc/containerd
+    cat >>/etc/containerd/config.toml <<EOF
+[plugins.cri]
+  systemd_cgroup = true
+EOF
+
+    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configure-cgroup-driver-used-by-kubelet-on-control-plane-node
+    sed -i -e 's/KUBELET_EXTRA_ARGS=/KUBELET_EXTRA_ARGS=--cgroup-driver=systemd /' /etc/sysconfig/kubelet
 
     update-alternatives --set iptables /usr/sbin/iptables-legacy
     systemctl daemon-reload
-    systemctl enable --now docker kubelet
+    # Stop them, just in case.
+    systemctl stop $cri_daemon kubelet
+    # kubelet will be started by kubeadm after configuring it.
+    systemctl enable $cri_daemon kubelet
+    systemctl start $cri_daemon
 fi
