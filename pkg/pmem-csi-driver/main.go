@@ -11,6 +11,8 @@ import (
 	"flag"
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 
 	pmemcommon "github.com/intel/pmem-csi/pkg/pmem-common"
@@ -35,6 +37,9 @@ var (
 	showVersion        = flag.Bool("version", false, "Show release version and exit")
 	driverStatePath    = flag.String("statePath", "", "Directory path where to persist the state of the driver running on a node, defaults to /var/lib/<drivername>")
 
+	/* scheduler options */
+	schedulerListenAddr = flag.String("schedulerListen", "", "listen address for scheduler extender (like :8000), disabled by default")
+
 	version = "unknown" // Set version during build time
 )
 
@@ -50,6 +55,20 @@ func Main() int {
 	}
 
 	klog.V(3).Info("Version: ", version)
+
+	var client *kubernetes.Clientset
+	if *schedulerListenAddr != "" {
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			pmemcommon.ExitError("failed to build in-cluster Kubernetes client configuration", err)
+			return 1
+		}
+		client, err = kubernetes.NewForConfig(config)
+		if err != nil {
+			pmemcommon.ExitError("failed to create Kubernetes client", err)
+			return 1
+		}
+	}
 
 	driver, err := GetPMEMDriver(Config{
 		DriverName:         *driverName,
@@ -67,6 +86,8 @@ func Main() int {
 		DeviceManager:      *deviceManager,
 		StateBasePath:      *driverStatePath,
 		Version:            version,
+		schedulerListen:    *schedulerListenAddr,
+		client:             client,
 	})
 	if err != nil {
 		pmemcommon.ExitError("failed to initialize driver", err)

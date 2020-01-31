@@ -4,8 +4,6 @@ metadata:
   name: pmem-csi-controller
   namespace: default
 ---
-# Required by StatefulSet, not actually used. See
-# https://github.com/kubernetes/kubernetes/issues/69608.
 apiVersion: v1
 kind: Service
 metadata:
@@ -31,6 +29,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-controller
+        pmem-csi.intel.com/webhook: ignore
     spec:
       serviceAccount: pmem-csi-controller
       containers:
@@ -47,7 +46,7 @@ spec:
                  "-nodeid=$(KUBE_NODE_NAME)",
                  "-caFile=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
                  "-certFile=/certs/pmem-csi-registry.crt",
-                 "-keyFile=/certs/pmem-csi-registry.key"
+                 "-keyFile=/certs/pmem-csi-registry.key",
                ]
         # Passing /dev to container may cause container creation error because
         # termination-log is located on /dev/ by default, re-locate to /tmp
@@ -98,6 +97,7 @@ spec:
     metadata:
       labels:
         app: pmem-csi-node
+        pmem-csi.intel.com/webhook: ignore
     spec:
       nodeSelector:
         storage: pmem

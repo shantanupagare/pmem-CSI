@@ -1,0 +1,41 @@
+apiVersion: admissionregistration.k8s.io/v1beta1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: pmem-csi-hook
+webhooks:
+  - name: pod-hook.pmem-csi.intel.com
+    namespaceSelector:
+      matchExpressions:
+      - key: pmem-csi.intel.com/webhook
+        operator: NotIn
+        values: ["ignore"]
+    objectSelector:
+      matchExpressions:
+      - key: pmem-csi.intel.com/webhook
+        operator: NotIn
+        values: ["ignore"]
+    failurePolicy: Fail
+    clientConfig:
+      # The preferred approach for locating the webhook is via the DNS
+      # entry of its service. However, that does not work in a normal
+      # kubeadm cluster because it runs with `hostNetwork: true`
+      # (https://kubernetes.io/docs/reference/setup-tools/kubeadm/implementation-details/#generate-static-pod-manifests-for-control-plane-components)
+      # and without `dnsPolicy: ClusterFirstWithHostNet`
+      # (https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-dns-policy).
+      #service:
+      #  name: pmem-csi-scheduler
+      #  namespace: default
+      #  path: /pod/mutate
+      #
+      # This URL is identical to the service above. Replace it with
+      # https://127.0.0.1:32000/pod/mutate when using the node port 32000.
+      url: https://pmem-csi-scheduler.default.svc/pod/mutate
+      # caBundle may have to be set for that URL and/or the service,
+      # depending on whether the API server trusts the signer of the
+      # certificate used by the webhook.
+      caBundle:
+    rules:
+      - operations: ["CREATE"]
+        apiGroups: [""]
+        apiVersions: ["v1"]
+        resources: ["pods"]

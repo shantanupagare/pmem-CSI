@@ -24,13 +24,29 @@ fi
 
 generate_csr()
 {
+    CSR_NAME=${1}
+    shift
     CN=$1
-    CSR_NAME=${2:-$CN}
+    shift
+    # alternative host names follow
 
     echo "Generating signing request certificate for '$CN'"
-    cert_json=$(echo '{ "CN":  "'$CN'", "key": { "algo": "ecdsa", "size": 256 } }')
-
-    echo $cert_json | cfssl genkey - | cfssljson -bare $CSR_NAME
+    cat <<EOF | cfssl genkey - | cfssljson -bare $CSR_NAME
+{
+   "hosts": [
+$(while [ "$1" ]; do
+    echo "        \"$1\","
+    shift
+  done)
+      "$CN"
+   ],
+   "CN": "$CN",
+   "key": {
+       "algo": "ecdsa",
+       "size": 256
+   }
+}
+EOF
 
     echo "Creating kubernetes signing request: $CSR_NAME-csr"
     $KUBECTL delete csr $CSR_NAME-csr 2> /dev/null || true
@@ -75,8 +91,10 @@ cleanup()
 echo "Generating certificate files in: $WORKDIR"
 
 if [ -z "$($KUBECTL get secret pmem-csi-registry-secrets 2> /dev/null)" ]; then
-    # Generate PMEM registry server certificate signing request
-    generate_csr "pmem-registry"
+    # Generate PMEM registry server certificate signing request. The same
+    # certificate is also used for reaching the server under some other names,
+    # so we also have to include also those.
+    generate_csr "pmem-registry" "pmem-registry" "pmem-csi-controller" "pmem-csi-controller.default" "pmem-csi-controller.default.svc" "127.0.0.1"
 
     $KUBECTL delete secret "pmem-csi-registry-secrets" 2> /dev/null || true
     #store the approved registry certificate and key inside kubernetes secrets
@@ -110,7 +128,7 @@ for node in $NODES; do
     if [ -z $(echo "$existing_nodes" | grep $node) ]; then
         create_node_secret=1
         FINAL_NODES="$FINAL_NODES $node"
-        generate_csr "pmem-node-controller" "$node"
+        generate_csr "$node" "pmem-node-controller"
     else
         echo "Secrets for '$node' already found in 'pmem-csi-node-secrets'"
     fi
