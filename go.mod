@@ -38,10 +38,10 @@ require (
 	google.golang.org/grpc v1.24.0
 	gopkg.in/freddierice/go-losetup.v1 v1.0.0-20170407175016-fc9adea44124
 	gopkg.in/square/go-jose.v2 v2.4.0 // indirect
-	k8s.io/api v0.17.0
+	k8s.io/api v0.0.0
 	k8s.io/apimachinery v0.17.0
-	k8s.io/client-go v0.17.0
-	k8s.io/component-base v0.17.0
+	k8s.io/client-go v0.0.0
+	k8s.io/component-base v0.0.0
 	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d // indirect
 	k8s.io/kubernetes v1.17.2
