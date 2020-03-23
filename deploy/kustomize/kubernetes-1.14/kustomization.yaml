@@ -1,6 +1,7 @@
 bases:
 - ../driver
 - rbac
+- ../webhook-base
 
 resources:
 - driverinfo-beta.yaml
