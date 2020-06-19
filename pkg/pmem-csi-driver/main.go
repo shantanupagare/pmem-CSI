@@ -52,6 +52,7 @@ func init() {
 	/* metrics options */
 	flag.StringVar(&config.metricsListen, "metricsListen", "", "listen address (like :8001) for prometheus metrics endpoint, disabled by default")
 	flag.StringVar(&config.metricsPath, "metricsPath", "/metrics", "The HTTP path where prometheus metrics will be exposed. Default is `/metrics`.")
+	flag.Var(&config.metricsMerge, "metricsMerge", "Additional local HTTP ports of metrics endpoints that are to be mixed into the driver's metrics response. Format is prefix=port, for example provisioner=9000. Can be used more than once.")
 
 	flag.Set("logtostderr", "true")
 }

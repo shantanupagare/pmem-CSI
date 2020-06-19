@@ -45,6 +45,12 @@ spec:
       labels:
         app: pmem-csi-controller
         pmem-csi.intel.com/webhook: ignore
+      annotations:
+        # Metrics endpoint provided by pmem-driver, includes data from
+        # sidecar.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "10010"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -85,6 +91,8 @@ spec:
                  "-endpoint=unix:///csi/csi-controller.sock",
                  "-registryEndpoint=tcp://0.0.0.0:10000",
                  "-metricsListen=:10010",
+                 "-metricsPath=/metrics",
+                 "-metricsMerge=provisioner=http://localhost:8080/metrics", # matches --metrics-address and --metrics-path below
                  "-nodeid=$(KUBE_NODE_NAME)",
                  "-caFile=/certs/ca.crt",
                  "-certFile=/certs/tls.crt",
@@ -116,7 +124,7 @@ spec:
       - name: external-provisioner
         image: quay.io/k8scsi/csi-provisioner:v1.X.Y
         imagePullPolicy: IfNotPresent
-        args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true", "--timeout=5m" ]
+        args: [ "-v=3", "--csi-address=/csi/csi-controller.sock", "--feature-gates=Topology=true", "--strict-topology=true", "--timeout=5m", "--metrics-address=localhost:8080", "--metrics-path=/metrics" ]
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
@@ -145,6 +153,12 @@ spec:
       labels:
         app: pmem-csi-node
         pmem-csi.intel.com/webhook: ignore
+      annotations:
+        # Metrics endpoint provided by pmem-driver, includes data from
+        # sidecar.
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "10010"
     spec:
       nodeSelector:
         storage: pmem
@@ -160,6 +174,8 @@ spec:
                   "-nodeid=$(KUBE_NODE_NAME)",
                   "-controllerEndpoint=tcp://$(KUBE_POD_IP):10001",
                   "-registryEndpoint=tcp://pmem-csi-controller:10000",
+                  "-metricsListen=:10010",
+                  "-metricsPath=/metrics",
                   "-caFile=/certs/ca.crt",
                   "-certFile=/certs/tls.crt",
                   "-keyFile=/certs/tls.key",

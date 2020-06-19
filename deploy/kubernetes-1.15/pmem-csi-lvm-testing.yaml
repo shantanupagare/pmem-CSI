@@ -205,6 +205,10 @@ spec:
   serviceName: pmem-csi-controller
   template:
     metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "10010"
+        prometheus.io/scrape: "true"
       labels:
         app: pmem-csi-controller
         pmem-csi.intel.com/deployment: lvm-testing
@@ -228,6 +232,8 @@ spec:
         - -endpoint=unix:///csi/csi-controller.sock
         - -registryEndpoint=tcp://0.0.0.0:10000
         - -metricsListen=:10010
+        - -metricsPath=/metrics
+        - -metricsMerge=provisioner=http://localhost:8080/metrics
         - -nodeid=$(KUBE_NODE_NAME)
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
@@ -267,6 +273,8 @@ spec:
         - --feature-gates=Topology=true
         - --strict-topology=true
         - --timeout=5m
+        - --metrics-address=localhost:8080
+        - --metrics-path=/metrics
         - -v=5
         image: quay.io/k8scsi/csi-provisioner:v1.6.0
         imagePullPolicy: IfNotPresent
@@ -330,6 +338,10 @@ spec:
       pmem-csi.intel.com/deployment: lvm-testing
   template:
     metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "10010"
+        prometheus.io/scrape: "true"
       labels:
         app: pmem-csi-node
         pmem-csi.intel.com/deployment: lvm-testing
@@ -345,6 +357,8 @@ spec:
         - -nodeid=$(KUBE_NODE_NAME)
         - -controllerEndpoint=tcp://$(KUBE_POD_IP):10001
         - -registryEndpoint=tcp://pmem-csi-controller:10000
+        - -metricsListen=:10010
+        - -metricsPath=/metrics
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key

@@ -14,14 +14,17 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"syscall"
 	"time"
 
 	api "github.com/intel/pmem-csi/pkg/apis/pmemcsi/v1alpha1"
 	grpcserver "github.com/intel/pmem-csi/pkg/grpc-server"
+	"github.com/intel/pmem-csi/pkg/metrics-merger"
 	pmdmanager "github.com/intel/pmem-csi/pkg/pmem-device-manager"
 	pmemgrpc "github.com/intel/pmem-csi/pkg/pmem-grpc"
 	registry "github.com/intel/pmem-csi/pkg/pmem-registry"
@@ -89,6 +92,35 @@ func init() {
 	prometheus.MustRegister(buildInfo)
 }
 
+var (
+	endpointsFormat = `^([a-z]+)=(.+)$`
+	endpointsRE     = regexp.MustCompile(endpointsFormat)
+)
+
+// Endpoints maps a unique prefix to a URL.
+type Endpoints map[string]*url.URL
+
+func (endpoints *Endpoints) Set(value string) error {
+	parts := endpointsRE.FindStringSubmatch(value)
+	if parts == nil {
+		return fmt.Errorf("must match regular expression %q", endpointsFormat)
+	}
+	url, err := url.Parse(parts[2])
+	if err != nil {
+		return fmt.Errorf("%s must be a URL: %v", parts[2], err)
+	}
+	if *endpoints == nil {
+		*endpoints = Endpoints{}
+	}
+	(*endpoints)[parts[1]] = url
+	return nil
+}
+
+func (endpoints *Endpoints) String() string {
+	// Unused, only needed for flag.Value interface.
+	return ""
+}
+
 //Config type for driver configuration
 type Config struct {
 	//DriverName name of the csi driver
@@ -130,6 +162,7 @@ type Config struct {
 	// parameters for Prometheus metrics
 	metricsListen string
 	metricsPath   string
+	metricsMerge  Endpoints
 }
 
 type pmemDriver struct {
@@ -392,12 +425,23 @@ func (pmemd *pmemDriver) startMetrics(ctx context.Context, cancel func()) (strin
 		return "", nil
 	}
 
+	// We must merge our own internal metrics data with the data from the sidecars.
+	handler := metricsmerger.Handler{
+		ExportersHTTPTimeout: 10, // seconds
+	}
 	// We use the default Prometheus handler here and thus return all data that
 	// is registered globally, including (but not limited to!) our own metrics
 	// data. For example, some Go runtime information (https://povilasv.me/prometheus-go-metrics/)
 	// are included, which may be useful.
+	handler.Handlers = append(handler.Handlers, promhttp.Handler())
+
+	for _, url := range pmemd.cfg.metricsMerge {
+		// TODO: handle prefix
+		handler.Exporters = append(handler.Exporters, url.String())
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle(pmemd.cfg.metricsPath, promhttp.Handler())
+	mux.Handle(pmemd.cfg.metricsPath, handler)
 	return pmemd.startHTTPSServer(ctx, cancel, pmemd.cfg.metricsListen, mux)
 }
 
