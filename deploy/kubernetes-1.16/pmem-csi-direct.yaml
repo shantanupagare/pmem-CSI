@@ -190,6 +190,8 @@ spec:
   serviceName: pmem-csi-controller
   template:
     metadata:
+      annotations:
+        pmem-csi.intel.com/scrape: containers
       labels:
         app: pmem-csi-controller
         pmem-csi.intel.com/deployment: direct-production
@@ -212,12 +214,12 @@ spec:
         - -mode=controller
         - -endpoint=unix:///csi/csi-controller.sock
         - -registryEndpoint=tcp://0.0.0.0:10000
-        - -metricsListen=:10010
         - -nodeid=$(KUBE_NODE_NAME)
         - -caFile=/certs/ca.crt
         - -certFile=/certs/tls.crt
         - -keyFile=/certs/tls.key
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
+        - -metricsListen=:10010
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -231,6 +233,9 @@ spec:
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
+        ports:
+        - containerPort: 10010
+          name: metrics
         securityContext:
           readOnlyRootFilesystem: true
         terminationMessagePath: /tmp/termination-log
@@ -247,9 +252,13 @@ spec:
         - --feature-gates=Topology=true
         - --strict-topology=true
         - --timeout=5m
+        - --metrics-address=:10011
         image: quay.io/k8scsi/csi-provisioner:v1.6.0
         imagePullPolicy: IfNotPresent
         name: external-provisioner
+        ports:
+        - containerPort: 10011
+          name: metrics
         securityContext:
           readOnlyRootFilesystem: true
         volumeMounts:
@@ -282,6 +291,8 @@ spec:
       pmem-csi.intel.com/deployment: direct-production
   template:
     metadata:
+      annotations:
+        pmem-csi.intel.com/scrape: containers
       labels:
         app: pmem-csi-node
         pmem-csi.intel.com/deployment: direct-production
@@ -303,6 +314,7 @@ spec:
         - -statePath=/var/lib/$(PMEM_CSI_DRIVER_NAME)
         - -drivername=$(PMEM_CSI_DRIVER_NAME)
         - -pmemPercentage=100
+        - -metricsListen=:10010
         env:
         - name: KUBE_NODE_NAME
           valueFrom:
@@ -321,6 +333,9 @@ spec:
         image: intel/pmem-csi-driver:canary
         imagePullPolicy: IfNotPresent
         name: pmem-driver
+        ports:
+        - containerPort: 10010
+          name: metrics
         securityContext:
           privileged: true
           runAsUser: 0

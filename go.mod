@@ -22,7 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.10.0
-	github.com/stretchr/testify v1.4.0
+	github.com/stretchr/testify v1.5.1
 	go.uber.org/multierr v1.2.0 // indirect
 	go.uber.org/zap v1.11.0 // indirect
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381
@@ -34,7 +34,7 @@ require (
 	k8s.io/api v0.19.0-rc.4
 	k8s.io/apiextensions-apiserver v0.19.0-rc.4
 	k8s.io/apimachinery v0.19.0-rc.4
-	k8s.io/client-go v0.19.0-rc.4
+	k8s.io/client-go v1.18.0
 	k8s.io/component-base v0.19.0-rc.4
 	k8s.io/klog v1.0.0
 	k8s.io/kube-scheduler v0.19.0-rc.4
@@ -72,3 +72,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.19.0-rc.4
 	k8s.io/sample-controller => k8s.io/sample-controller v0.19.0-rc.4
 )
+
+replace github.com/kubernetes-csi/csi-lib-utils => github.com/pohly/csi-lib-utils v0.0.0-20200825123902-788aefcb4e09

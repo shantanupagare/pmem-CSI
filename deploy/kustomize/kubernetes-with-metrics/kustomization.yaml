@@ -1,0 +1,19 @@
+# Turns enables metrics support in the generic Kubernetes 1.15 deployment.
+
+bases:
+- ../kubernetes-1.15/
+
+patchesJson6902:
+- target:
+    group: apps
+    version: v1
+    kind: DaemonSet
+    name: pmem-csi-node
+  path: ../patches/metrics-node.yaml
+
+- target:
+    group: apps
+    version: v1
+    kind: StatefulSet
+    name: pmem-csi-controller
+  path: ../patches/metrics-controller.yaml
