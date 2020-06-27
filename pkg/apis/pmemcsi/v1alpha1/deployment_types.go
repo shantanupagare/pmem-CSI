@@ -40,6 +40,7 @@ func (mode *DeviceMode) String() string {
 	return string(*mode)
 }
 
+// +kubebuilder:validation:Enum=lvm,direct
 const (
 	// DeviceModeLVM represents 'lvm' device manager
 	DeviceModeLVM DeviceMode = "lvm"
@@ -49,10 +50,9 @@ const (
 
 // DeploymentSpec defines the desired state of Deployment
 type DeploymentSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make operator-generate-k8s" to regenerate code after modifying this file
 
-	// Image holds container image options
+	// PMEM-CSI driver container image
 	Image string `json:"image,omitempty"`
 	// PullPolicy image pull policy one of Always, Never, IfNotPresent
 	PullPolicy corev1.PullPolicy `json:"imagePullPolicy,omitempty"`
@@ -65,8 +65,10 @@ type DeploymentSpec struct {
 	// NodeResources Compute resources required by Node driver
 	NodeResources *corev1.ResourceRequirements `json:"nodeResources,omitempty"`
 	// DeviceMode to use to manage PMEM devices. One of lvm, direct
+	// +kubebuilder:default:lvm
 	DeviceMode DeviceMode `json:"deviceMode,omitempty"`
 	// LogLevel number for the log verbosity
+	// +kubebuilder:default=3
 	LogLevel uint16 `json:"logLevel,omitempty"`
 	// RegistryCert encoded certificate signed by a CA for registry server authentication
 	// If not provided, provisioned one by the operator using self-signed CA
@@ -88,6 +90,9 @@ type DeploymentSpec struct {
 	// PMEMPercentage represents the percentage of space to be used by the driver in each PMEM region
 	// on every node. Default 100
 	// This is only valid for driver in LVM mode
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=50
 	PMEMPercentage uint16 `json:"pmemPercentage,omitempty"`
 	// Labels contains additional labels for all objects created by the operator.
 	Labels map[string]string `json:"labels,omitempty"`
@@ -108,7 +113,7 @@ type DeploymentStatus struct {
 
 // Deployment is the Schema for the deployments API
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:path=deployments,scope=Namespaced
+// +kubebuilder:resource:path=deployments,scope=Cluster
 type Deployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -1,0 +1,6 @@
+{
+    version: "2",
+    domain: "pmem-csi.intel.com",
+    repo: "github.com/intel/pmem-csi/pkg/pmem-csi-operator",
+    projectName: "pmem-csi-operator"
+}
