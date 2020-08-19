@@ -3,12 +3,5 @@
 bases:
 - ../../olm-catalog
 
-patchesJson6902:
-- target:
-    group: operators.coreos.com
-    version: v1alpha1
-    kind: ClusterServiceVersion
-    name: pmem-csi-operator.vX.Y.Z
-    namespace: placeholder
-  path: ../patches/clusterserviceversion-patch.yaml
-  
+patchesStrategicMerge:
+- ../patches/clusterserviceversion-patch.yaml
